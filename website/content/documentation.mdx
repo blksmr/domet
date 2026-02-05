@@ -13,7 +13,7 @@ Lightweight under the hood: a tight scroll loop and hysteresis for stable, flick
 For the source code, check out the [GitHub](https://github.com/blksmr/domet).
 
 ### Installation
-Install the package from your command line.
+Install the package from your command line. Requires React 18 or 19.
 
 ```bash
 npm install domet
@@ -69,7 +69,7 @@ function Page() {
 
 Tracking defaults are `threshold: 0.6`, `hysteresis: 150`, and `throttle: 10` (ms). `scrolling.behavior` defaults to `auto`, which resolves to `smooth` unless `prefers-reduced-motion` is enabled (then `instant`).
 
-IDs are sanitized: non-strings, empty values, and duplicates are ignored.
+IDs are sanitized: non-strings, empty values, and duplicates are ignored. Passing both `ids` and `selector` logs a warning in development; `selector` is ignored.
 
 ### Callbacks
 
@@ -345,6 +345,7 @@ useDomet({
 
 This library was born from a real need at work. I wanted a scroll-spy solution that was powerful and completely headless, but above all, extremely lightweight. No bloated dependencies, no opinionated styling, just a hook that does one thing well.
 
+Most scroll-spy libraries ship with their own components, their own CSS, their own opinions about your DOM structure. You end up fighting the library instead of building your UI. Override this class, wrap that element, pass a `renderItem` prop just to change a `<div>` into a `<button>`. It's exhausting. Headless means none of that. You get raw data — which section is active, how far you've scrolled, what's in view — and you do whatever you want with it. Your markup, your styles, your framework, zero compromises.
 
 Why a hook instead of a component wrapper? Because hooks give you full control. You decide the markup, the styling, and the behavior. If you want a `<ScrollSpy>` component, you can build one in minutes on top of `useDomet`. The hook stays minimal; you compose what you need.
 

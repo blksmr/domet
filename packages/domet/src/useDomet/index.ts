@@ -64,6 +64,10 @@ export function useDomet(options: DometOptions): UseDometReturn {
   const rawIds = "ids" in options ? options.ids : undefined;
   const rawSelector = "selector" in options ? options.selector : undefined;
 
+  if (process.env.NODE_ENV !== "production" && rawIds && rawSelector) {
+    console.warn("[domet] Both `ids` and `selector` were provided. Only one should be used. `selector` will be ignored.");
+  }
+
   const idsCacheRef = useRef<{
     raw: unknown;
     sanitized: string[] | undefined;

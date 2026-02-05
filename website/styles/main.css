@@ -34,7 +34,8 @@
   html {
     scroll-behavior: smooth;
     @apply text-text bg-background font-sans;
-
+    scrollbar-color: oklch(0 0 0/5%) transparent;
+    scrollbar-width: thin;
     body {
       @apply bg-background antialiased leading-6 font-sans text-base text-text;
     }

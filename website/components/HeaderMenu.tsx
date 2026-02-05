@@ -1,26 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { GitHubLogoIcon, ChevronDownIcon } from "@radix-ui/react-icons";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import { ChevronDownIcon } from "@radix-ui/react-icons";
 import Link from "next/link";
 
 const PROJECT_LINKS = [
-  {
-    name: "GitHub",
-    href: "https://github.com/blksmr/domet",
-    icon: GitHubLogoIcon,
-    external: true,
-  },
-  {
-    name: "npm",
-    href: "https://www.npmjs.com/package/domet",
-    external: true,
-  },
-  {
-    name: "llms.txt",
-    href: "/llms.txt",
-    external: true,
-  },
+  { name: "GitHub", href: "https://github.com/blksmr/domet" },
+  { name: "X (Twitter)", href: "https://x.com/blkasmir" },
+  { name: "NPM", href: "https://www.npmjs.com/package/domet" },
+  { name: "llms.txt", href: "/llms.txt" },
 ];
 
 const EXAMPLES = [
@@ -36,81 +24,47 @@ const EXAMPLES = [
   { name: "Tree View", href: "/examples/treeview" },
 ];
 
+const itemClass =
+  "block px-2 text-black rounded-md py-1 text-sm no-underline transition-colors duration-200 outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-hover";
+
 export function HeaderMenu() {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-
-    if (open) {
-      document.addEventListener("mousedown", handleClickOutside);
-      return () => document.removeEventListener("mousedown", handleClickOutside);
-    }
-  }, [open]);
-
-  useEffect(() => {
-    function handleEscape(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-
-    if (open) {
-      document.addEventListener("keydown", handleEscape);
-      return () => document.removeEventListener("keydown", handleEscape);
-    }
-  }, [open]);
-
   return (
-    <div className="relative" ref={ref}>
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-xs text-muted hover:text-hover transition-colors duration-200"
-        aria-expanded={open}
-        aria-haspopup="true"
-      >
+    <DropdownMenu.Root modal>
+      <DropdownMenu.Trigger className="flex items-center text-muted gap-1 text-sm hover:text-hover transition-colors duration-200 outline-none">
         Links
-        <ChevronDownIcon
-          className={`transition-transform duration-200 ${open ? "rotate-180" : ""}`}
-        />
-      </button>
+        <ChevronDownIcon className="transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+      </DropdownMenu.Trigger>
 
-      {open && (
-        <div className="absolute right-0 top-full mt-2 w-48 py-1 bg-background border border-border rounded-lg shadow-sm z-50">
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={8}
+          className="w-36 p-1 bg-background border border-border rounded-lg shadow-sm z-50 origin-[var(--radix-dropdown-menu-content-transform-origin)] data-[state=open]:animate-dropdown-in data-[state=closed]:animate-dropdown-out"
+        >
           {PROJECT_LINKS.map((link) => (
-            <a
-              key={link.name}
-              href={link.href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 px-3 py-1.5 text-xs text-muted hover:text-hover hover:bg-secondary no-underline transition-colors duration-200"
-              onClick={() => setOpen(false)}
-            >
-              {link.icon && <link.icon className="size-3.5" />}
-              {link.name}
-            </a>
+            <DropdownMenu.Item key={link.name} asChild>
+              <a
+                href={link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={itemClass}
+              >
+                {link.name}
+              </a>
+            </DropdownMenu.Item>
           ))}
 
-          <div className="my-1 border-t border-border" />
+          <DropdownMenu.Separator className="my-1 border-t border-border" />
 
-          <div className="max-h-64 overflow-y-auto">
-            {EXAMPLES.map((example) => (
-              <Link
-                key={example.href}
-                href={example.href}
-                target="_blank"
-                className="block px-3 py-1.5 text-xs text-muted hover:text-hover hover:bg-secondary no-underline transition-colors duration-200"
-                onClick={() => setOpen(false)}
-              >
+          {EXAMPLES.map((example) => (
+            <DropdownMenu.Item key={example.href} asChild>
+              <Link href={example.href} target="_blank" className={itemClass}>
                 {example.name}
               </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+            </DropdownMenu.Item>
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
   );
 }
