@@ -44,6 +44,23 @@ export default {
           "monospace",
         ],
       },
+      boxShadow: {
+        "sm": "0 8px 16px oklch(0 0 0 / 6%)"
+      },
+      keyframes: {
+        "dropdown-in": {
+          from: { opacity: "0", transform: "scale(0.95)" },
+          to: { opacity: "1", transform: "scale(1)" },
+        },
+        "dropdown-out": {
+          from: { opacity: "1", transform: "scale(1)" },
+          to: { opacity: "0", transform: "scale(0.95)" },
+        },
+      },
+      animation: {
+        "dropdown-in": "dropdown-in 150ms ease-out",
+        "dropdown-out": "dropdown-out 150ms ease-in",
+      },
       colors: {
         text: "var(--text)",
         "muted": "var(--muted)",

@@ -2,6 +2,6 @@
   "files": [],
   "references": [
     { "path": "./website" },
-    { "path": "./packages/Domet" }
+    { "path": "./packages/domet" }
   ]
 }
