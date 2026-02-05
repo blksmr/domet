@@ -95,7 +95,7 @@ Callbacks do not fire while `lockActive` is enabled during programmatic scroll. 
   { name: "sections", type: "Record<string, SectionState>", description: "Per-section state indexed by ID" },
   { name: "register", type: "(id: string) => RegisterProps", description: "Props to spread on section elements (includes id, ref, data-domet)" },
   { name: "link", type: "(id: string, options?: ScrollToOptions) => LinkProps", description: "Nav props (onClick, aria-current, data-active) with optional scroll overrides" },
-  { name: "navRef", type: "(id: string) => (el: HTMLElement | null) => void", description: "Ref callback for nav items; auto-scrolls active item into view in scrollable nav containers" },
+  { name: "navRef", type: "(id: string, options?: NavRefOptions) => (el: HTMLElement | null) => void", description: "Ref callback for nav items; auto-scrolls active item into view in scrollable nav containers" },
   { name: "scrollTo", type: "(target: ScrollTarget, options?: ScrollToOptions) => void", description: "Programmatically scroll to a section or absolute scroll position" },
 ]} />
 
@@ -130,6 +130,22 @@ type ScrollingOptions = {
 ```
 
 If `position` is omitted for ID targets, Domet uses a dynamic alignment that keeps the trigger line within the section and prefers centering sections that fit in the viewport. When `position: "center"` is set, sections that fit in the viewport are centered; sections taller than the viewport align to the top instead (respecting `scrolling.offset`).
+
+### NavRefOptions
+
+Options for customizing nav item auto-scrolling behavior.
+
+```ts showLineNumbers
+type NavRefOptions = {
+  behavior?: 'smooth' | 'instant' | 'auto'
+  offset?: number
+  position?: 'nearest' | 'center' | 'start' | 'end'
+}
+```
+
+- `behavior`: Scroll animation (`'auto'` respects `prefers-reduced-motion`). Default: `'auto'`.
+- `offset`: Pixel offset from container edge when scrolling nav items. Default: `0`.
+- `position`: Alignment within the scrollable container. Default: `'nearest'`.
 
 ### ScrollState
 
@@ -268,7 +284,7 @@ return (
 
 ### Scrollable Navigation
 
-Keep the active nav item visible in a scrollable navigation container:
+Keep the active nav item visible in a scrollable navigation container. The `navRef` function accepts optional scroll options for smooth animations and consistent offset:
 
 ```tsx showLineNumbers
 const { link, navRef } = useDomet({ ids })
@@ -276,7 +292,11 @@ const { link, navRef } = useDomet({ ids })
 return (
   <nav style={{ maxHeight: '200px', overflow: 'auto' }}>
     {ids.map(id => (
-      <button key={id} ref={navRef(id)} {...link(id)}>
+      <button
+        key={id}
+        ref={navRef(id, { behavior: 'smooth', offset: 16 })}
+        {...link(id)}
+      >
         {id}
       </button>
     ))}

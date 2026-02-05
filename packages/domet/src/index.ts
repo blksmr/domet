@@ -3,6 +3,8 @@
 export type {
   DometOptions,
   LinkProps,
+  NavRefOptions,
+  NavRefPosition,
   Offset,
   RegisterProps,
   ScrollBehavior,

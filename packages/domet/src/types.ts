@@ -35,6 +35,14 @@ export type ScrollBehavior = "smooth" | "instant" | "auto";
 
 export type ScrollToPosition = "top" | "center" | "bottom";
 
+export type NavRefPosition = "nearest" | "center" | "start" | "end";
+
+export type NavRefOptions = {
+  behavior?: ScrollBehavior;
+  offset?: number;
+  position?: NavRefPosition;
+};
+
 export type ScrollTarget =
   | string
   | { id: string }
@@ -103,7 +111,7 @@ export type UseDometReturn = {
   scrollTo: (target: ScrollTarget, options?: ScrollToOptions) => void;
   register: (id: string) => RegisterProps;
   link: (id: string, options?: ScrollToOptions) => LinkProps;
-  navRef: (id: string) => (el: HTMLElement | null) => void;
+  navRef: (id: string, options?: NavRefOptions) => (el: HTMLElement | null) => void;
 };
 
 export type ResolvedSection = {
