@@ -44,8 +44,7 @@
     "./utils": {},
     "./utils/resolvers": {},
     "./utils/scoring": {},
-    "./utils/validation": {},
-    "./utils/tracking": {}
+    "./utils/validation": {}
   },
   "files": [
     "dist"
@@ -53,7 +52,7 @@
   "scripts": {
     "clean": "rm -rf dist",
     "dev": "bunchee -w",
-    "build": "bunchee prepare && bunchee",
+    "build": "bunchee",
     "lint": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -61,8 +60,8 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "peerDependencies": {
-    "react": "^18.0.0",
-    "react-dom": "^18.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
