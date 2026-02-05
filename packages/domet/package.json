@@ -1,7 +1,7 @@
 {
   "name": "domet",
   "description": "A React hook for scroll tracking with smooth 60fps performance and smart hysteresis",
-  "version": "1.1.5",
+  "version": "1.2.0",
   "author": "blksmr",
   "repository": {
     "type": "git",

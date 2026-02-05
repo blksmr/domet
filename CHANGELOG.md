@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.0] - 2025-02-05
+
+### Added
+
+- React 19 support (`react@^18.0.0 || ^19.0.0`)
+- Dev-only runtime warning when both `ids` and `selector` are provided
+- Bundle size tracking with size-limit (5.32 kB / 7 kB budget)
+- Robustness tests for cleanup, SSR, StrictMode, and dynamic DOM (76 total tests)
+
+### Changed
+
+- Decomposed monolithic `useDomet` hook into 4 focused internal hooks (`useSectionResolver`, `useScrollDetection`, `useProgrammaticScroll`, `useNavAutoScroll`). No public API changes.
+- Replaced `rm -rf` clean script with cross-platform `rimraf`
+
+### Removed
+
+- Unused `tracking.ts` utility module
+
 ## [1.1.5] - 2025-01-18
 
 ### Added
