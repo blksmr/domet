@@ -34,17 +34,7 @@
         "types": "./dist/cjs/index.d.ts",
         "default": "./dist/cjs/index.js"
       }
-    },
-    "./useDomet": {},
-    "./constants": {},
-    "./resolvers": {},
-    "./scoring": {},
-    "./types": {},
-    "./validation": {},
-    "./utils": {},
-    "./utils/resolvers": {},
-    "./utils/scoring": {},
-    "./utils/validation": {}
+    }
   },
   "files": [
     "dist"
@@ -57,14 +47,24 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "size": "size-limit",
+    "size:check": "size-limit --limit"
   },
+  "size-limit": [
+    {
+      "path": "dist/es/index.mjs",
+      "import": "*",
+      "limit": "7 kB"
+    }
+  ],
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
     "react-dom": "^18.0.0 || ^19.0.0"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
+    "@size-limit/preset-small-lib": "^12.0.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",
@@ -72,10 +72,11 @@
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^5.1.2",
     "@vitest/coverage-v8": "^2.1.8",
+    "bunchee": "^6.6.0",
     "jsdom": "^25.0.1",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "bunchee": "^6.6.0",
+    "size-limit": "^12.0.0",
     "typescript": "^5.8.3",
     "vite": "^5.4.21",
     "vitest": "^2.1.8"
