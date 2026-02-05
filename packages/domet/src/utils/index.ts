@@ -62,6 +62,19 @@ export function areSectionsEqual(
   return countA === countB;
 }
 
+export function findScrollableParent(element: HTMLElement): HTMLElement | null {
+  let parent = element.parentElement;
+  while (parent) {
+    const style = getComputedStyle(parent);
+    const overflow = style.overflow + style.overflowY;
+    if (/(auto|scroll)/.test(overflow)) {
+      return parent;
+    }
+    parent = parent.parentElement;
+  }
+  return null;
+}
+
 export * from "./validation";
 export * from "./resolvers";
 export * from "./scoring";
