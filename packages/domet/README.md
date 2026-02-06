@@ -54,17 +54,34 @@ function Page() {
 |------|------|---------|-------------|
 | `ids` | `string[]` | — | Array of section IDs to track (mutually exclusive with selector) |
 | `selector` | `string` | — | CSS selector to find sections (mutually exclusive with ids) |
-| `container` | `RefObject<HTMLElement \| null>` | `undefined` | React ref to scrollable container (defaults to window) |
+| `container` | `RefObject<HTMLElement \| null>` | `undefined` | React ref to scrollable container (defaults to window). Assumed stable for the lifetime of the hook — remount to change it |
 | `tracking` | `TrackingOptions` | `undefined` | Tracking configuration (offset, threshold, hysteresis, throttle) |
 | `scrolling` | `ScrollingOptions` | `undefined` | Default scroll behavior for link/scrollTo (behavior, offset, position, lockActive) |
+| `onActive` | `(id: string \| null, prevId: string \| null) => void` | `undefined` | Called when active section changes |
+| `onEnter` | `(id: string) => void` | `undefined` | Called when a section enters the viewport |
+| `onLeave` | `(id: string) => void` | `undefined` | Called when a section leaves the viewport |
+| `onScrollStart` | `() => void` | `undefined` | Called when scrolling starts |
+| `onScrollEnd` | `() => void` | `undefined` | Called when scrolling stops (after 100ms of inactivity) |
 
 `tracking.offset` and `scrolling.offset` serve different purposes:
 - **`tracking.offset`**: Defines the trigger line position (where section detection happens). A value of `100` means the line sits 100px from the top of the viewport. Sections crossing this line are candidates for "active".
 - **`scrolling.offset`**: Only affects programmatic scrolling (`link`/`scrollTo`). It shifts where the section lands after navigation. Has no effect on detection.
 
-Tracking defaults are `threshold: 0.6`, `hysteresis: 150`, and `throttle: 10` (ms). `scrolling.behavior` defaults to `auto`, which resolves to `smooth` unless `prefers-reduced-motion` is enabled (then `instant`).
+Tracking defaults are `offset: 0`, `threshold: 0.6`, `hysteresis: 150`, and `throttle: 10` (ms). `scrolling.behavior` defaults to `auto`, which resolves to `smooth` unless `prefers-reduced-motion` is enabled (then `instant`).
 
 IDs are sanitized: non-strings, empty values, and duplicates are ignored. Passing both `ids` and `selector` logs a warning in development; `selector` is ignored.
+
+All tracking values are validated at runtime. Out-of-range values are clamped with a development warning:
+
+| Option | Min | Max |
+|---|---|---|
+| `offset` (px) | -10000 | 10000 |
+| `offset` (%) | -500% | 500% |
+| `threshold` | 0 | 1 |
+| `hysteresis` | 0 | 1000 |
+| `throttle` (ms) | 0 | 1000 |
+
+Invalid types (e.g. passing a boolean as offset) fall back to the default value.
 
 ### Callbacks
 
@@ -76,7 +93,7 @@ IDs are sanitized: non-strings, empty values, and duplicates are ignored. Passin
 | `onScrollStart` | `() => void` | Called when scrolling starts |
 | `onScrollEnd` | `() => void` | Called when scrolling stops |
 
-Callbacks do not fire while `lockActive` is enabled during programmatic scroll. `onScrollEnd` fires after `100` ms of scroll inactivity.
+When `lockActive` is enabled during a programmatic scroll, `onActive`, `onEnter`, and `onLeave` do not fire until the scroll completes. `onScrollStart` and `onScrollEnd` still fire normally. `onScrollEnd` fires after `100` ms of scroll inactivity.
 
 ### Return Value
 
@@ -109,7 +126,7 @@ type TrackingOptions = {
 }
 ```
 
-Defaults: `threshold: 0.6`, `hysteresis: 150`, `throttle: 10` (ms).
+Defaults: `offset: 0`, `threshold: 0.6`, `hysteresis: 150`, `throttle: 10` (ms).
 
 ### ScrollingOptions
 
@@ -206,6 +223,8 @@ type ScrollToOptions = {
 ```
 
 By default, `lockActive` is enabled for id targets and disabled for `{ top }`.
+
+If `scrollTo` is called with an unknown ID or an element that is not yet mounted, a development warning is logged and the call is ignored. Invalid `top` values (non-finite numbers) are also rejected with a warning.
 
 ### Examples
 
