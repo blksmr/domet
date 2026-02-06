@@ -71,17 +71,15 @@ Tracking defaults are `offset: 0`, `threshold: 0.6`, `hysteresis: 150`, and `thr
 
 IDs are sanitized: non-strings, empty values, and duplicates are ignored. Passing both `ids` and `selector` logs a warning in development; `selector` is ignored.
 
-All tracking values are validated at runtime. Out-of-range values are clamped with a development warning:
+All tracking values are validated at runtime. Out-of-range values are clamped with a development warning. Invalid types (e.g. passing a boolean as offset) fall back to the default value.
 
-| Option | Min | Max |
-|---|---|---|
-| `offset` (px) | -10000 | 10000 |
-| `offset` (%) | -500% | 500% |
-| `threshold` | 0 | 1 |
-| `hysteresis` | 0 | 1000 |
-| `throttle` (ms) | 0 | 1000 |
-
-Invalid types (e.g. passing a boolean as offset) fall back to the default value.
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `offset (px)` | `-10000 to 10000` | `0` | Pixel offset from the top of the viewport |
+| `offset (%)` | `-500% to 500%` | `0` | Percentage of viewport height |
+| `threshold` | `0 to 1` | `0.6` | Minimum visibility ratio for high-score detection |
+| `hysteresis` | `0 to 1000` | `150` | Score margin required to switch active section |
+| `throttle` | `0 to 1000 ms` | `10` | Minimum interval between recalculations |
 
 ### Callbacks
 
