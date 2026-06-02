@@ -10,9 +10,9 @@ import type {
 import { DEFAULT_OFFSET, SCROLL_IDLE_MS } from "../../constants";
 import {
   buildSectionCache,
+  buildViewportRect,
   calculateSectionScores,
   determineActiveSection,
-  getSectionBoundsFromCache,
   resolveOffset,
 } from "../../utils";
 
@@ -142,11 +142,7 @@ export function useScrollDetection({
       cacheValidRef.current = true;
     }
 
-    const sectionBounds = getSectionBoundsFromCache(
-      sectionCacheRef.current,
-      scrollY,
-    );
-    if (sectionBounds.length === 0) return;
+    if (sectionCacheRef.current.length === 0) return;
 
     const effectiveOffset = resolveOffset(
       trackingOffset,
@@ -154,7 +150,7 @@ export function useScrollDetection({
       DEFAULT_OFFSET,
     );
 
-    const scores = calculateSectionScores(sectionBounds, currentSections, {
+    const scores = calculateSectionScores(sectionCacheRef.current, {
       scrollY,
       viewportHeight,
       scrollHeight,
@@ -294,7 +290,9 @@ export function useScrollDetection({
 
     if (sectionsChanged) {
       const newSections: Record<string, SectionState> = {};
-      for (const s of scores) {
+      const cache = sectionCacheRef.current;
+      for (let i = 0; i < scores.length; i++) {
+        const s = scores[i];
         newSections[s.id] = {
           bounds: {
             top: Math.round(s.bounds.top),
@@ -306,7 +304,7 @@ export function useScrollDetection({
           inView: s.inView,
           active:
             s.id === (isProgrammatic ? currentActiveId : newActiveId),
-          rect: s.rect,
+          rect: buildViewportRect(cache[i], scrollY),
         };
       }
       prevSectionsStateRef.current = newSections;

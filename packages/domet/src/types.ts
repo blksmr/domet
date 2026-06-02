@@ -126,9 +126,8 @@ export type SectionScore = {
   score: number;
   visibilityRatio: number;
   inView: boolean;
-  bounds: InternalSectionBounds;
+  bounds: SectionBounds;
   progress: number;
-  rect: DOMRect | null;
 };
 
 export type CachedSectionPosition = {

@@ -60,85 +60,74 @@ export function buildSectionCache(
   });
 }
 
-export function getSectionBoundsFromCache(
-  cache: CachedSectionPosition[],
-  scrollY: number,
-): InternalSectionBounds[] {
-  return cache.map((cached) => {
-    const viewportTop = cached.baseTop - scrollY;
-    const rect = {
-      x: cached.left,
-      y: viewportTop,
-      width: cached.width,
-      height: cached.height,
-      top: viewportTop,
-      bottom: viewportTop + cached.height,
-      left: cached.left,
-      right: cached.left + cached.width,
-      toJSON() {
-        return {
-          x: this.x,
-          y: this.y,
-          width: this.width,
-          height: this.height,
-          top: this.top,
-          bottom: this.bottom,
-          left: this.left,
-          right: this.right,
-        };
-      },
-    } as DOMRect;
+function rectToJSON(this: DOMRect) {
+  return {
+    x: this.x,
+    y: this.y,
+    width: this.width,
+    height: this.height,
+    top: this.top,
+    bottom: this.bottom,
+    left: this.left,
+    right: this.right,
+  };
+}
 
-    return {
-      id: cached.id,
-      top: cached.baseTop,
-      bottom: cached.baseTop + cached.height,
-      height: cached.height,
-      rect,
-    };
-  });
+export function buildViewportRect(
+  cached: CachedSectionPosition,
+  scrollY: number,
+): DOMRect {
+  const top = cached.baseTop - scrollY;
+  return {
+    x: cached.left,
+    y: top,
+    width: cached.width,
+    height: cached.height,
+    top,
+    bottom: top + cached.height,
+    left: cached.left,
+    right: cached.left + cached.width,
+    toJSON: rectToJSON,
+  } as DOMRect;
 }
 
 export function calculateSectionScores(
-  sectionBounds: InternalSectionBounds[],
-  _sections: ResolvedSection[],
+  cache: CachedSectionPosition[],
   ctx: ScoringContext,
 ): SectionScore[] {
-  const {
-    scrollY,
-    viewportHeight,
-    effectiveOffset,
-    visibilityThreshold,
-    scrollDirection: _scrollDirection,
-    sectionIndexMap: _sectionIndexMap,
-  } = ctx;
+  const { scrollY, viewportHeight, effectiveOffset, visibilityThreshold } = ctx;
 
   const viewportTop = scrollY;
   const viewportBottom = scrollY + viewportHeight;
 
   const maxScroll = Math.max(1, ctx.scrollHeight - viewportHeight);
   const scrollProgress = Math.min(1, Math.max(0, scrollY / maxScroll));
-  const dynamicOffset = effectiveOffset + scrollProgress * (viewportHeight - effectiveOffset);
+  const dynamicOffset =
+    effectiveOffset + scrollProgress * (viewportHeight - effectiveOffset);
   const triggerLine = scrollY + dynamicOffset;
 
-  return sectionBounds.map((section) => {
-    const visibleTop = Math.max(section.top, viewportTop);
-    const visibleBottom = Math.min(section.bottom, viewportBottom);
+  const result: SectionScore[] = new Array(cache.length);
+
+  for (let i = 0; i < cache.length; i++) {
+    const cached = cache[i];
+    const top = cached.baseTop;
+    const height = cached.height;
+    const bottom = top + height;
+
+    const visibleTop = Math.max(top, viewportTop);
+    const visibleBottom = Math.min(bottom, viewportBottom);
     const visibleHeight = Math.max(0, visibleBottom - visibleTop);
-    const visibilityRatio =
-      section.height > 0 ? visibleHeight / section.height : 0;
+    const visibilityRatio = height > 0 ? visibleHeight / height : 0;
     const visibleInViewportRatio =
       viewportHeight > 0 ? visibleHeight / viewportHeight : 0;
-    const isInView =
-      section.bottom > viewportTop && section.top < viewportBottom;
+    const isInView = bottom > viewportTop && top < viewportBottom;
 
-    const sectionProgress = (() => {
-      if (section.height === 0) return 0;
-      const entryPoint = viewportBottom;
-      const totalTravel = viewportHeight + section.height;
-      const traveled = entryPoint - section.top;
-      return Math.max(0, Math.min(1, traveled / totalTravel));
-    })();
+    let sectionProgress = 0;
+    if (height > 0) {
+      const totalTravel = viewportHeight + height;
+      const traveled = viewportBottom - top;
+      sectionProgress = Math.max(0, Math.min(1, traveled / totalTravel));
+    }
 
     let score = 0;
 
@@ -149,31 +138,38 @@ export function calculateSectionScores(
     }
 
     if (isInView) {
-      const containsTriggerLine =
-        triggerLine >= section.top && triggerLine < section.bottom;
-
-      if (containsTriggerLine) {
+      if (triggerLine >= top && triggerLine < bottom) {
         score += 300;
       }
 
-      const sectionCenter = section.top + section.height / 2;
+      const sectionCenter = top + height / 2;
       const distanceFromTrigger = Math.abs(sectionCenter - triggerLine);
-      const maxDistance = viewportHeight;
       const proximityScore =
-        Math.max(0, 1 - distanceFromTrigger / maxDistance) * 500;
+        Math.max(0, 1 - distanceFromTrigger / viewportHeight) * 500;
       score += proximityScore;
     }
 
-    return {
-      id: section.id,
+    result[i] = {
+      id: cached.id,
       score,
       visibilityRatio,
       inView: isInView,
-      bounds: section,
+      bounds: { top, bottom, height },
       progress: sectionProgress,
-      rect: section.rect,
     };
-  });
+  }
+
+  return result;
+}
+
+function findScoreById(
+  scores: SectionScore[],
+  id: string,
+): SectionScore | undefined {
+  for (let i = 0; i < scores.length; i++) {
+    if (scores[i].id === id) return scores[i];
+  }
+  return undefined;
 }
 
 export function determineActiveSection(
@@ -187,11 +183,6 @@ export function determineActiveSection(
 ): string | null {
   if (scores.length === 0 || sectionIds.length === 0) return null;
 
-  const scoreMap = new Map<string, SectionScore>();
-  for (const s of scores) {
-    scoreMap.set(s.id, s);
-  }
-
   const maxScroll = Math.max(0, scrollHeight - viewportHeight);
   const hasScroll = maxScroll > MIN_SCROLL_THRESHOLD;
   const isAtBottom = hasScroll && scrollY + viewportHeight >= scrollHeight - EDGE_TOLERANCE;
@@ -200,9 +191,9 @@ export function determineActiveSection(
   if (isAtBottom && sectionIds.length >= 2) {
     const lastId = sectionIds[sectionIds.length - 1];
     const secondLastId = sectionIds[sectionIds.length - 2];
-    const secondLastScore = scoreMap.get(secondLastId);
+    const secondLastScore = findScoreById(scores, secondLastId);
     const secondLastNotVisible = !secondLastScore || !secondLastScore.inView;
-    if (scoreMap.has(lastId) && secondLastNotVisible) {
+    if (findScoreById(scores, lastId) && secondLastNotVisible) {
       return lastId;
     }
   }
@@ -210,17 +201,22 @@ export function determineActiveSection(
   if (isAtTop && sectionIds.length >= 2) {
     const firstId = sectionIds[0];
     const secondId = sectionIds[1];
-    const secondScore = scoreMap.get(secondId);
+    const secondScore = findScoreById(scores, secondId);
     const secondNotVisible = !secondScore || !secondScore.inView;
-    if (scoreMap.has(firstId) && secondNotVisible) {
+    if (findScoreById(scores, firstId) && secondNotVisible) {
       return firstId;
     }
   }
 
   let bestCandidate: SectionScore | null = null;
   let hasVisibleCandidate = false;
+  let currentScore: SectionScore | undefined;
 
   for (const s of scores) {
+    if (currentActiveId !== null && s.id === currentActiveId) {
+      currentScore = s;
+    }
+
     const isVisible = s.inView;
     if (hasVisibleCandidate && !isVisible) continue;
     if (!hasVisibleCandidate && isVisible) {
@@ -234,8 +230,6 @@ export function determineActiveSection(
   }
 
   if (!bestCandidate) return null;
-
-  const currentScore = scoreMap.get(currentActiveId ?? "");
 
   const shouldSwitch =
     !currentScore ||

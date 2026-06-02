@@ -46,6 +46,7 @@
     "lint": "eslint . --fix",
     "test": "vitest run",
     "test:watch": "vitest",
+    "bench": "vitest bench --run",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "size": "size-limit",
