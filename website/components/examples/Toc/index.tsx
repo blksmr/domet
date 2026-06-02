@@ -13,6 +13,8 @@ const SECTIONS = [
 
 const SECTION_IDS = SECTIONS.map((s) => s.id);
 
+const SKELETON_WIDTHS = ["92%", "78%", "85%", "71%"];
+
 export function Toc() {
   const { active, register, link, sections } = useDomet({ ids: SECTION_IDS });
 
@@ -57,11 +59,11 @@ export function Toc() {
           >
             <h2 className="mb-4 text-xl font-medium text-gray-900">{title}</h2>
             <div className="space-y-3">
-              {[...Array(4)].map((_, i) => (
+              {SKELETON_WIDTHS.map((width, i) => (
                 <div
                   key={i}
                   className="h-4 rounded bg-gray-100"
-                  style={{ width: `${70 + Math.random() * 30}%` }}
+                  style={{ width }}
                 />
               ))}
             </div>
