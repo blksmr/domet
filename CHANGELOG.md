@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file.
 
+## [1.2.1] - 2026-06-03
+
+### Performance
+
+- Eliminate per-frame allocations in the scroll hot path: removed the per-frame `Map` in `determineActiveSection`, fused `getSectionBoundsFromCache` into `calculateSectionScores` (single pass over the position cache), and deferred `DOMRect` construction to the sections-state path. Steady-state frames now allocate zero rects. ~3-4x throughput on a 100-section frame with lower mean and GC-tail latency. No behavior change.
+
 ## [1.2.0] - 2025-02-05
 
 ### Added
