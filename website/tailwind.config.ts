@@ -9,6 +9,9 @@ export default {
     "./mdx-components.tsx",
   ],
   prefix: "",
+  future: {
+    hoverOnlyWhenSupported: true,
+  },
   theme: {
     container: {
       center: true,
@@ -61,11 +64,17 @@ export default {
         "dropdown-in": "dropdown-in 150ms ease-out",
         "dropdown-out": "dropdown-out 150ms ease-in",
       },
+      transitionTimingFunction: {
+        "out-strong": "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
       colors: {
         text: "var(--text)",
+        subtle: "var(--subtle)",
         "muted": "var(--muted)",
         "hover": "var(--hover)",
         border: "var(--border)",
+        field: "var(--field)",
+        danger: "var(--danger)",
         grey: "var(--grey)",
         primary: "var(--primary)",
         secondary: "var(--background-secondary)",

@@ -13,14 +13,11 @@ const PROJECT_LINKS = [
 
 const EXAMPLES = [
   { name: "Basic", href: "/examples/basic" },
-  { name: "Container", href: "/examples/container" },
+  { name: "Debug", href: "/examples/debug" },
   { name: "Dynamic Offset", href: "/examples/dynamicoffset" },
+  { name: "Element Scroll", href: "/examples/elementscroll" },
   { name: "Modal Form", href: "/examples/modalform" },
-  { name: "Playground", href: "/examples/playground" },
-  { name: "Progress", href: "/examples/progress" },
   { name: "Reveal", href: "/examples/reveal" },
-  { name: "Tick Indicator", href: "/examples/tickindicator" },
-  { name: "Table of Contents", href: "/examples/toc" },
   { name: "Tree View", href: "/examples/treeview" },
 ];
 

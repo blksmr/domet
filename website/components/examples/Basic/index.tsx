@@ -2,6 +2,8 @@
 
 import { useDomet } from "domet";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
+import { focusRing } from "../shared";
 import { useNavProgress } from "./useNavProgress";
 
 const SECTIONS = [
@@ -36,22 +38,30 @@ const SECTION_IDS = SECTIONS.map((s) => s.id);
 export function Basic() {
   const { register, link, scroll, sections } = useDomet({
     ids: SECTION_IDS,
+    debug: true,
   });
 
   const { getIndicatorStyle } = useNavProgress(SECTION_IDS, scroll, sections);
 
   return (
-    <div className="relative min-h-screen bg-white">
-      <nav className="fixed right-3 top-1/2 -translate-y-1/2 z-10 flex flex-col items-end gap-3">
+    <div className="relative min-h-svh bg-background">
+      <nav
+        aria-label="Sections"
+        className="fixed right-3 top-1/2 z-10 flex -translate-y-1/2 flex-col items-end"
+      >
         {SECTIONS.map(({ id, label }) => (
           <button
             key={id}
+            type="button"
             {...link(id)}
             aria-label={`Go to ${label}`}
-            className="group flex items-center gap-3"
+            className={cn(
+              "flex h-6 w-10 items-center justify-end rounded-md hover:opacity-60",
+              focusRing,
+            )}
           >
             <span
-              className="block h-0.5 rounded-full bg-black transition-opacity will-change-[opacity] ease-out group-hover:opacity-70"
+              className="block h-0.5 rounded-full bg-text"
               style={getIndicatorStyle(id)}
             />
           </button>
@@ -63,25 +73,23 @@ export function Basic() {
           <section
             key={id}
             {...register(id)}
-            className="flex items-center justify-center p-12 relative flex-col gap-2 min-h-screen"
+            className="relative flex min-h-svh flex-col items-center justify-center gap-3 p-12"
           >
-            <div className="relative pointer-events-none select-none w-full max-w-[500px] overflow-hidden rounded-lg aspect-[3/2]">
-              <div
-                className="absolute inset-0"
-                style={{ backgroundColor: color }}
-              >
-                <Image
-                  src={`/images/${id}.jpg`}
-                  alt={label}
-                  fill
-                  sizes="(max-width: 500px) 100vw, 500px"
-                  priority={index === 0}
-                  onLoad={(e) => e.currentTarget.classList.remove("opacity-0")}
-                  className="object-cover opacity-0 transition-opacity duration-500 ease-out"
-                />
-              </div>
+            <div
+              className="pointer-events-none relative aspect-[3/2] w-full max-w-[500px] select-none overflow-hidden rounded-lg outline outline-1 -outline-offset-1 outline-black/10"
+              style={{ backgroundColor: color }}
+            >
+              <Image
+                src={`/images/${id}.jpg`}
+                alt={label}
+                fill
+                sizes="(max-width: 500px) 100vw, 500px"
+                priority={index === 0}
+                onLoad={(e) => e.currentTarget.classList.remove("opacity-0")}
+                className="object-cover opacity-0 transition-opacity duration-300 ease-out-strong"
+              />
             </div>
-            <span className="text-black/30 text-[10px] font-mono">
+            <span className="max-w-full text-center font-mono text-xs text-subtle [overflow-wrap:anywhere]">
               {caption}
             </span>
           </section>

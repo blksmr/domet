@@ -5,12 +5,15 @@
 @layer base {
   :root {
     --text: oklch(0.22213 0 0);
+    --subtle: oklch(0.53 0 0);
     --muted: oklch(0.79 0 0);
     --hover: oklch(0.30557 0 0);
     --background: #fff;
     --background-secondary: oklch(0.9821 0 0);
     --primary: #8dc8e8;
     --border: oklch(0.93 0 0);
+    --field: oklch(0.62 0 0);
+    --danger: oklch(0.53 0.2 27);
     --grey: oklch(0.98 0 0);
   }
 

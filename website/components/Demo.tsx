@@ -17,7 +17,7 @@ export function Demo({ src, caption = "" }: DemoProps) {
         className="relative block w-full aspect-[640/720] sm:aspect-[640/470] overflow-y-auto overflow-x-hidden border border-border rounded-lg isolate no-scrollbar"
         title={caption}
       />
-      <div className="absolute bottom-2 left-2 right-2 flex items-center justify-end gap-2">
+      <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-5rem)] items-center gap-2">
         {caption && (
           <figcaption className="px-2 bg-black/30 backdrop-blur-sm text-white rounded-full text-xs select-none truncate min-w-0">
             {caption}

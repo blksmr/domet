@@ -1,7 +1,18 @@
 "use client";
 
+import { ChevronRightIcon } from "@radix-ui/react-icons";
 import { useDomet } from "domet";
-import { useState } from "react";
+import { memo, useState } from "react";
+import { cn } from "@/lib/utils";
+import {
+  Metric,
+  ProgressLine,
+  Prose,
+  focusRing,
+  navItem,
+  percent,
+  secondaryButton,
+} from "../shared";
 
 type TreeItem = {
   id: string;
@@ -98,62 +109,33 @@ const DOCUMENTATION_TREE: TreeItem[] = [
   },
 ];
 
-function flattenTree(items: TreeItem[]): { id: string; title: string; depth: number; parentId?: string }[] {
-  const result: { id: string; title: string; depth: number; parentId?: string }[] = [];
+type FlatSection = {
+  id: string;
+  title: string;
+  depth: number;
+  parentId?: string;
+};
 
-  function traverse(items: TreeItem[], depth: number, parentId?: string) {
-    for (const item of items) {
-      result.push({ id: item.id, title: item.title, depth, parentId });
-      if (item.children) {
-        traverse(item.children, depth + 1, item.id);
-      }
-    }
-  }
+const FLAT_SECTIONS: FlatSection[] = DOCUMENTATION_TREE.flatMap((group) => [
+  { id: group.id, title: group.title, depth: 0 },
+  ...(group.children ?? []).map((child) => ({
+    id: child.id,
+    title: child.title,
+    depth: 1,
+    parentId: group.id,
+  })),
+]);
 
-  traverse(items, 0);
-  return result;
-}
-
-const FLAT_SECTIONS = flattenTree(DOCUMENTATION_TREE);
 const SECTION_IDS = FLAT_SECTIONS.map((s) => s.id);
+const GROUP_IDS = DOCUMENTATION_TREE.map((group) => group.id);
 
-const LOREM_PARAGRAPHS = [
-  "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris.",
-  "Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident.",
-  "Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium, totam rem aperiam, eaque ipsa quae ab illo inventore veritatis.",
-  "Nemo enim ipsam voluptatem quia voluptas sit aspernatur aut odit aut fugit, sed quia consequuntur magni dolores eos qui ratione voluptatem sequi nesciunt.",
-  "Neque porro quisquam est, qui dolorem ipsum quia dolor sit amet, consectetur, adipisci velit, sed quia non numquam eius modi tempora incidunt.",
-];
-
-function getRandomParagraphs(count: number, seed: number): string[] {
-  const result: string[] = [];
-  for (let i = 0; i < count; i++) {
-    result.push(LOREM_PARAGRAPHS[(seed + i) % LOREM_PARAGRAPHS.length]);
-  }
-  return result;
-}
-
-function CodeBlock({ code }: { code: string }) {
-  return (
-    <pre className="bg-zinc-900 text-zinc-100 p-4 rounded-lg overflow-x-auto text-sm font-mono">
-      <code>{code}</code>
-    </pre>
-  );
-}
-
-function SectionContent({ id, depth }: { id: string; depth: number }) {
-  const seed = id.charCodeAt(0) + id.length;
-  const paragraphCount = depth === 0 ? 2 : 3 + (seed % 3);
-  const paragraphs = getRandomParagraphs(paragraphCount, seed);
-  const showCode = seed % 3 === 0;
-
-  const codeExamples: Record<string, string> = {
-    installation: `npm install domet
+const CODE_EXAMPLES: Record<string, string> = {
+  installation: `npm install domet
 # or
 yarn add domet
 # or
 pnpm add domet`,
-    "quick-start": `import { useDomet } from 'domet';
+  "quick-start": `import { useDomet } from 'domet';
 
 function App() {
   const { active, register, link } = useDomet({
@@ -173,7 +155,7 @@ function App() {
     </div>
   );
 }`,
-    "useDomet-hook": `const {
+  "useDomet-hook": `const {
   active,     // Current active section ID
   index,      // Index of active section
   progress,   // Overall scroll progress (0-1)
@@ -184,8 +166,9 @@ function App() {
   scrollTo,   // Navigate to section
   register,   // Register section element
   link,       // Create navigation button props
+  navRef,     // Keep the active nav item in view
 } = useDomet(options);`,
-    options: `useDomet({
+  options: `useDomet({
   ids: ['section-1', 'section-2'],
   // or
   selector: '[data-section]',
@@ -196,7 +179,6 @@ function App() {
     offset: 100,              // Trigger line offset (px or %)
     threshold: 0.6,           // Visibility threshold
     hysteresis: 150,          // Score margin to resist switching
-    throttle: 10,             // Update throttle (ms)
   },
 
   scrolling: {
@@ -209,7 +191,7 @@ function App() {
   onScrollStart: () => {},
   onScrollEnd: () => {},
 });`,
-    "custom-containers": `const containerRef = useRef<HTMLDivElement>(null);
+  "custom-containers": `const containerRef = useRef<HTMLDivElement>(null);
 
 const { active, register, link } = useDomet({
   ids: ['s1', 's2', 's3'],
@@ -223,7 +205,7 @@ return (
     <section {...register('s3')}>Section 3</section>
   </div>
 );`,
-    callbacks: `useDomet({
+  callbacks: `useDomet({
   ids: sectionIds,
   onActive: (id, prevId) => {
     console.log(\`Active changed: \${prevId} → \${id}\`);
@@ -242,7 +224,7 @@ return (
     console.log('Scroll ended');
   },
 });`,
-    "table-of-contents": `function TableOfContents() {
+  "table-of-contents": `function TableOfContents() {
   const { active, link, sections } = useDomet({
     ids: ['intro', 'features', 'api', 'examples'],
   });
@@ -250,19 +232,19 @@ return (
   return (
     <nav className="toc">
       {['intro', 'features', 'api', 'examples'].map((id) => (
-        <a
+        <button
           key={id}
           {...link(id)}
           className={active === id ? 'active' : ''}
           style={{ opacity: 0.5 + (sections[id]?.visibility ?? 0) * 0.5 }}
         >
           {id}
-        </a>
+        </button>
       ))}
     </nav>
   );
 }`,
-    "progress-indicator": `function ProgressIndicator() {
+  "progress-indicator": `function ProgressIndicator() {
   const { progress, direction, scroll } = useDomet({
     ids: sectionIds,
   });
@@ -278,31 +260,25 @@ return (
     </div>
   );
 }`,
-    nextjs: `// app/layout.tsx
+  nextjs: `// app/section-nav.tsx
 'use client';
 
 import { useDomet } from 'domet';
 
-export default function Layout({ children }) {
-  const { active, register, link } = useDomet({
-    ids: ['hero', 'features', 'pricing', 'faq'],
-  });
+export function SectionNav() {
+  const { ids, link } = useDomet({ selector: '[data-section]' });
 
   return (
-    <html>
-      <body>
-        <nav className="fixed top-0">
-          <button {...link('hero')}>Home</button>
-          <button {...link('features')}>Features</button>
-          <button {...link('pricing')}>Pricing</button>
-          <button {...link('faq')}>FAQ</button>
-        </nav>
-        {children}
-      </body>
-    </html>
+    <nav>
+      {ids.map((id) => (
+        <button key={id} {...link(id)}>
+          {id}
+        </button>
+      ))}
+    </nav>
   );
 }`,
-    "css-selectors": `// Instead of passing IDs manually:
+  "css-selectors": `// Instead of passing IDs manually:
 const { active, sections } = useDomet({
   selector: '[data-section]',
 });
@@ -311,122 +287,56 @@ const { active, sections } = useDomet({
 <section data-section id="intro">...</section>
 <section data-section id="features">...</section>
 <section data-section id="pricing">...</section>`,
-  };
-
-  return (
-    <div className="space-y-4">
-      {paragraphs.map((p, i) => (
-        <p key={i} className="text-zinc-600 leading-relaxed">
-          {p}
-        </p>
-      ))}
-      {(showCode || codeExamples[id]) && (
-        <div className="mt-6">
-          <CodeBlock
-            code={
-              codeExamples[id] ||
-              `// Example code for ${id}\nconst example = () => {\n  // Implementation details...\n};`
-            }
-          />
-        </div>
-      )}
-      {depth === 0 && (
-        <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          <p className="text-blue-800 text-sm">
-            <strong>Note:</strong> This section contains {DOCUMENTATION_TREE.find((t) => t.id === id)?.children?.length || 0} subsections.
-            Scroll down to explore each topic in detail.
-          </p>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type TreeNodeProps = {
-  item: { id: string; title: string; depth: number; parentId?: string };
-  isActive: boolean;
-  isParentActive: boolean;
-  visibility: number;
-  onNavigate: (id: string) => void;
-  expandedGroups: Set<string>;
-  onToggleGroup: (id: string) => void;
-  hasChildren: boolean;
-  navRef: (el: HTMLElement | null) => void;
 };
 
-function TreeNode({
-  item,
-  isActive,
-  isParentActive,
-  visibility,
-  onNavigate,
-  expandedGroups,
-  onToggleGroup,
-  hasChildren,
-  navRef,
-}: TreeNodeProps) {
-  const isExpanded = expandedGroups.has(item.id);
-  const showNode = item.depth === 0 || (item.parentId && expandedGroups.has(item.parentId));
+type SectionBodyProps = {
+  id: string;
+  index: number;
+  topics: number;
+};
 
-  if (!showNode) return null;
+const SectionBody = memo(function SectionBody({
+  id,
+  index,
+  topics,
+}: SectionBodyProps) {
+  const code = CODE_EXAMPLES[id];
 
   return (
-    <div
-      className="relative"
-      style={{ paddingLeft: item.depth > 0 ? 16 : 0 }}
-    >
-      {item.depth > 0 && (
-        <div className="absolute left-2 top-0 bottom-0 w-px bg-zinc-200" />
+    <>
+      <Prose
+        paragraphs={topics > 0 ? 1 : 2 + (index % 2)}
+        start={index}
+        className="mt-3"
+      />
+      {topics > 0 && (
+        <p className="mt-3 text-sm text-subtle">
+          {topics} topics in this chapter.
+        </p>
       )}
-      <button
-        ref={navRef}
-        onClick={() => {
-          if (hasChildren && item.depth === 0) {
-            onToggleGroup(item.id);
-          }
-          onNavigate(item.id);
-        }}
-        className={`
-          group flex items-center gap-2 w-full px-3 py-2 text-left text-sm rounded-lg transition-all
-          ${isActive ? "bg-indigo-100 text-indigo-900 font-medium" : ""}
-          ${isParentActive && !isActive ? "bg-indigo-50 text-indigo-700" : ""}
-          ${!isActive && !isParentActive ? "text-zinc-600 hover:bg-zinc-100" : ""}
-        `}
-      >
-        {hasChildren && item.depth === 0 && (
-          <span
-            className={`text-xs text-zinc-400 transition-transform ${isExpanded ? "rotate-90" : ""}`}
-          >
-            ▶
-          </span>
-        )}
-        {item.depth > 0 && (
-          <span className="w-2 h-2 rounded-full bg-zinc-300 group-hover:bg-zinc-400 transition-colors" />
-        )}
-        <span className="flex-1">{item.title}</span>
-        {visibility > 0 && (
-          <span
-            className="w-1.5 h-1.5 rounded-full bg-indigo-500 transition-opacity"
-            style={{ opacity: visibility }}
-          />
-        )}
-      </button>
-    </div>
+      {code && (
+        <pre className="no-scrollbar mt-4 overflow-x-auto rounded-lg border border-border bg-secondary px-4 py-3">
+          <code>{code}</code>
+        </pre>
+      )}
+    </>
   );
-}
+});
 
 export function TreeView() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(
-    new Set(DOCUMENTATION_TREE.map((t) => t.id))
+    () => new Set(GROUP_IDS),
   );
 
-  const { active, progress, direction, register, scrollTo, sections, navRef } = useDomet({
-    ids: SECTION_IDS,
-    tracking: { offset: "10%", hysteresis: 100 },
-    scrolling: { behavior: "smooth", offset: 16 },
-  });
+  const { active, progress, direction, register, link, scrollTo, sections, navRef } =
+    useDomet({
+      ids: SECTION_IDS,
+      tracking: { offset: "10%", hysteresis: 100 },
+      scrolling: { offset: 16 },
+      debug: true,
+    });
 
-  const handleToggleGroup = (id: string) => {
+  const toggleGroup = (id: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -438,144 +348,164 @@ export function TreeView() {
     });
   };
 
-  const handleNavigate = (id: string) => {
-    const item = FLAT_SECTIONS.find((s) => s.id === id);
-    if (item?.parentId && !expandedGroups.has(item.parentId)) {
-      setExpandedGroups((prev) => new Set([...prev, item.parentId!]));
-    }
-    scrollTo(id, { position: "center" });
+  const activeSection = FLAT_SECTIONS.find((s) => s.id === active);
+
+  const renderLink = (id: string, title: string, isParentActive = false) => {
+    const isActive = active === id;
+    const visibility = sections[id]?.visibility ?? 0;
+
+    return (
+      <button
+        key={id}
+        type="button"
+        ref={navRef(id, { offset: 24 })}
+        {...link(id)}
+        className={cn(
+          navItem(isActive),
+          "flex min-w-0 flex-1 items-center justify-between gap-2",
+          isParentActive && !isActive && "text-text",
+        )}
+      >
+        <span className="truncate">{title}</span>
+        <span
+          aria-hidden
+          className="size-1 shrink-0 rounded-full bg-text"
+          style={{ opacity: visibility }}
+        />
+      </button>
+    );
   };
 
-  const activeItem = FLAT_SECTIONS.find((s) => s.id === active);
-  const activeParentId = activeItem?.parentId;
-
-  const childrenMap = new Map<string, boolean>();
-  for (const section of FLAT_SECTIONS) {
-    if (section.depth === 0) {
-      childrenMap.set(
-        section.id,
-        FLAT_SECTIONS.some((s) => s.parentId === section.id)
-      );
-    }
-  }
-
   return (
-    <div className="flex min-h-screen bg-white">
-      <aside className="fixed left-0 top-0 h-screen w-72 border-r border-zinc-200 bg-zinc-50 flex flex-col">
-        <div className="p-4 border-b border-zinc-200">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold text-sm">
-              D
-            </div>
-            <span className="font-semibold text-zinc-900">Domet Docs</span>
-          </div>
-          <div className="text-xs text-zinc-500">v1.0.0</div>
-        </div>
-
-        <div className="p-3 border-b border-zinc-200 bg-white">
-          <div className="flex items-center gap-2 text-xs">
-            <div className="flex-1 bg-zinc-100 rounded-full h-1.5 overflow-hidden">
-              <div
-                className="h-full bg-indigo-500 transition-all duration-150"
-                style={{ width: `${progress * 100}%` }}
-              />
-            </div>
-            <span className="text-zinc-500 font-mono w-12 text-right">
-              {Math.round(progress * 100)}%
-            </span>
-            <span className="text-zinc-400">
+    <div className="min-h-dvh">
+      <aside className="fixed inset-y-0 left-0 hidden w-64 flex-col border-r border-border md:flex">
+        <div className="px-4 pb-3 pt-4">
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="font-medium">Domet Docs</span>
+            <span className="font-mono text-xs tabular-nums text-subtle">
+              {percent(progress)}{" "}
               {direction === "down" ? "↓" : direction === "up" ? "↑" : "·"}
             </span>
           </div>
         </div>
+        <ProgressLine value={progress} />
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {FLAT_SECTIONS.map((item) => (
-            <TreeNode
-              key={item.id}
-              item={item}
-              isActive={active === item.id}
-              isParentActive={activeParentId === item.id}
-              visibility={sections[item.id]?.visibility ?? 0}
-              onNavigate={handleNavigate}
-              expandedGroups={expandedGroups}
-              onToggleGroup={handleToggleGroup}
-              hasChildren={childrenMap.get(item.id) || false}
-              navRef={navRef(item.id)}
-            />
-          ))}
+        <nav
+          aria-label="Documentation"
+          className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3"
+        >
+          {DOCUMENTATION_TREE.map((group) => {
+            const isExpanded = expandedGroups.has(group.id);
+
+            return (
+              <div key={group.id}>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-expanded={isExpanded}
+                    aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title}`}
+                    onClick={() => toggleGroup(group.id)}
+                    className={cn(
+                      "flex size-6 shrink-0 items-center justify-center rounded-md text-subtle hover:text-text",
+                      focusRing,
+                    )}
+                  >
+                    <ChevronRightIcon
+                      aria-hidden
+                      className={cn(
+                        "transition-transform duration-200 ease-out-strong motion-reduce:transition-none",
+                        isExpanded && "rotate-90",
+                      )}
+                    />
+                  </button>
+                  {renderLink(
+                    group.id,
+                    group.title,
+                    activeSection?.parentId === group.id,
+                  )}
+                </div>
+                {isExpanded && (
+                  <div className="ml-3 flex flex-col border-l border-border pl-4">
+                    {group.children?.map((child) =>
+                      renderLink(child.id, child.title),
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </nav>
 
-        <div className="p-3 border-t border-zinc-200 bg-white text-xs text-zinc-500">
-          <div className="flex justify-between">
-            <span>Active:</span>
-            <span className="font-mono text-indigo-600">{active || "none"}</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span>Sections:</span>
-            <span className="font-mono">{SECTION_IDS.length}</span>
-          </div>
+        <div className="space-y-1 border-t border-border p-4">
+          <Metric label="active">{active ?? "none"}</Metric>
+          <Metric label="sections">{SECTION_IDS.length}</Metric>
         </div>
       </aside>
 
-      <main className="ml-72 flex-1">
-        <div className="max-w-3xl mx-auto px-8 py-12">
-          <header className="mb-12 pb-8 border-b border-zinc-200">
-            <h1 className="text-4xl font-bold text-zinc-900 mb-4">
-              Domet Documentation
-            </h1>
-            <p className="text-xl text-zinc-600">
-              A comprehensive guide to using the Domet scroll-spy hook library.
-              Scroll through this documentation to see useDomet in action with a tree navigation.
+      <header className="sticky top-0 z-10 bg-background md:hidden">
+        <div className="flex items-baseline justify-between gap-4 px-6 py-3 text-sm">
+          <span className="truncate">{activeSection?.title ?? "Domet Docs"}</span>
+          <span className="font-mono text-xs tabular-nums text-subtle">
+            {percent(progress)}
+          </span>
+        </div>
+        <ProgressLine value={progress} />
+      </header>
+
+      <main className="md:ml-64">
+        <div className="mx-auto max-w-screen-md px-6 pb-24 pt-12">
+          <header>
+            <h1 className="text-lg">Domet Documentation</h1>
+            <p className="mt-1 max-w-[65ch] text-subtle">
+              A long page with nested sections. The tree follows the active
+              section and keeps it in view inside the sidebar.
             </p>
           </header>
 
-          {FLAT_SECTIONS.map((item) => {
-            const HeadingTag = item.depth === 0 ? "h2" : "h3";
-            const headingSize = item.depth === 0 ? "text-2xl" : "text-xl";
-            const sectionState = sections[item.id];
+          {FLAT_SECTIONS.map(({ id, title, depth }, i) => {
+            const state = sections[id];
+            const Heading = depth === 0 ? "h2" : "h3";
+            const group = DOCUMENTATION_TREE.find((g) => g.id === id);
 
             return (
               <section
-                key={item.id}
-                {...register(item.id)}
-                className={`
-                  mb-12 scroll-mt-8
-                  ${item.depth === 0 ? "pt-8 border-t border-zinc-200" : "pl-4 border-l-2 border-zinc-100"}
-                `}
+                key={id}
+                {...register(id)}
+                className={
+                  depth === 0 ? "mt-10 border-t border-border pt-10" : "mt-8"
+                }
               >
-                <div className="flex items-start justify-between gap-4 mb-4">
-                  <HeadingTag
-                    className={`${headingSize} font-semibold text-zinc-900`}
-                  >
-                    {item.depth === 0 && (
-                      <span className="text-indigo-500 mr-2">
-                        {String(DOCUMENTATION_TREE.findIndex((t) => t.id === item.id) + 1).padStart(2, "0")}.
+                <div className="flex items-baseline justify-between gap-4">
+                  <Heading className={depth === 0 ? "text-lg" : "text-base"}>
+                    {depth === 0 && (
+                      <span className="mr-3 font-mono text-xs tabular-nums text-subtle">
+                        {String(GROUP_IDS.indexOf(id) + 1).padStart(2, "0")}
                       </span>
                     )}
-                    {item.title}
-                  </HeadingTag>
-                  {sectionState && (
-                    <div className="flex items-center gap-2 text-xs text-zinc-400 font-mono shrink-0">
-                      <span>vis: {Math.round(sectionState.visibility * 100)}%</span>
-                      <span className={sectionState.active ? "text-indigo-600" : ""}>
-                        {sectionState.active ? "●" : "○"}
-                      </span>
-                    </div>
-                  )}
+                    {title}
+                  </Heading>
+                  <span className="shrink-0 font-mono text-xs tabular-nums text-subtle">
+                    {state?.active ? "active · " : ""}visible{" "}
+                    {percent(state?.visibility)}
+                  </span>
                 </div>
-                <SectionContent id={item.id} depth={item.depth} />
+                <SectionBody
+                  id={id}
+                  index={i}
+                  topics={group?.children?.length ?? 0}
+                />
               </section>
             );
           })}
 
-          <footer className="mt-16 pt-8 border-t border-zinc-200 text-center text-zinc-500 text-sm">
-            <p>End of documentation. You&apos;ve scrolled through {SECTION_IDS.length} sections!</p>
+          <footer className="mt-16 flex items-center justify-between border-t border-border pt-6 text-sm text-subtle">
+            <span>{SECTION_IDS.length} sections</span>
             <button
+              type="button"
               onClick={() => scrollTo(SECTION_IDS[0], { position: "top" })}
-              className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+              className={secondaryButton}
             >
-              Back to top
+              Back to Top
             </button>
           </footer>
         </div>
