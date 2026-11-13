@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { useElementScroll } from "domet";
+import { useElementScroll } from "@afterfivespace/domet";
 import { fieldInput, primaryButton } from "../shared";
 
 type Field = {

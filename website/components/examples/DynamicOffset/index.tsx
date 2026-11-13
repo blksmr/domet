@@ -1,6 +1,6 @@
 "use client";
 
-import { useDomet } from "domet";
+import { useDomet } from "@afterfivespace/domet";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Prose, navItem, percent, scrollFadeX } from "../shared";

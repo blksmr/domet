@@ -1,4 +1,4 @@
-import type { ScrollState, SectionState } from "domet";
+import type { ScrollState, SectionState } from "@afterfivespace/domet";
 import { useMemo } from "react";
 
 type ProgressMap = Record<string, number>;

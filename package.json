@@ -14,7 +14,7 @@
     "build:dev": "turbo run build:dev",
     "documentation": "tsx scripts/documentation.ts",
     "clean": "npx turbo run clean && rm -rf .turbo node_modules/.cache",
-    "release": "npm run lint && npm run typecheck && npm run test && npm run clean -w packages/domet && npx turbo run build --filter=domet && npm run size -w packages/domet && npm publish --workspace=packages/domet"
+    "release": "npm run lint && npm run typecheck && npm run test && npm run clean -w packages/domet && npx turbo run build --filter=@afterfivespace/domet && npm run size -w packages/domet && npm publish --workspace=packages/domet"
   },
   "workspaces": [
     "packages/*",

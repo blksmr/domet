@@ -1,6 +1,6 @@
 "use client";
 
-import { useDomet } from "domet";
+import { useDomet } from "@afterfivespace/domet";
 import { Prose } from "../shared";
 
 const SECTIONS = [

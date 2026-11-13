@@ -1,6 +1,6 @@
 "use client";
 
-import { useDomet } from "domet";
+import { useDomet } from "@afterfivespace/domet";
 import { cn } from "@/lib/utils";
 import { navItem, scrollFadeX } from "../shared";
 

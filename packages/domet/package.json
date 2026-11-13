@@ -1,5 +1,5 @@
 {
-  "name": "domet",
+  "name": "@afterfivespace/domet",
   "description": "A React hook for scroll tracking with smooth 60fps performance and smart hysteresis",
   "version": "2.0.0",
   "author": "blksmr",
@@ -21,6 +21,9 @@
     "active-section"
   ],
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/cjs/index.js",
   "module": "./dist/es/index.mjs",
   "types": "./dist/cjs/index.d.ts",

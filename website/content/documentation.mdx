@@ -16,14 +16,14 @@ For the source code, check out the [GitHub](https://github.com/blksmr/domet).
 Install the package from your command line. Requires React 18 or 19.
 
 ```bash
-npm install domet
+npm install @afterfivespace/domet
 ```
 
 ### Usage
 Basic example of how to use the hook.
 
 ```tsx showLineNumbers
-import { useDomet } from 'domet'
+import { useDomet } from '@afterfivespace/domet'
 
 const ids = ['intro', 'features', 'api']
 
@@ -89,7 +89,7 @@ All tracking values are validated at runtime. Out-of-range values are clamped wi
 The same limits are exported as `VALIDATION_LIMITS`, for example to validate a settings form before passing values to the hook:
 
 ```ts
-import { VALIDATION_LIMITS } from 'domet'
+import { VALIDATION_LIMITS } from '@afterfivespace/domet'
 const { min, max } = VALIDATION_LIMITS.hysteresis // 0 and 1000
 ```
 
@@ -371,7 +371,7 @@ return (
 
 ```tsx showLineNumbers
 import { useRef } from 'react'
-import { useElementScroll } from 'domet'
+import { useElementScroll } from '@afterfivespace/domet'
 
 function Form() {
   const fieldRef = useRef<HTMLDivElement>(null)

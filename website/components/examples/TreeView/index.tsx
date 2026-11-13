@@ -1,7 +1,7 @@
 "use client";
 
 import { ChevronRightIcon } from "@radix-ui/react-icons";
-import { useDomet } from "domet";
+import { useDomet } from "@afterfivespace/domet";
 import { memo, useState } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -130,12 +130,12 @@ const SECTION_IDS = FLAT_SECTIONS.map((s) => s.id);
 const GROUP_IDS = DOCUMENTATION_TREE.map((group) => group.id);
 
 const CODE_EXAMPLES: Record<string, string> = {
-  installation: `npm install domet
+  installation: `npm install @afterfivespace/domet
 # or
-yarn add domet
+yarn add @afterfivespace/domet
 # or
-pnpm add domet`,
-  "quick-start": `import { useDomet } from 'domet';
+pnpm add @afterfivespace/domet`,
+  "quick-start": `import { useDomet } from '@afterfivespace/domet';
 
 function App() {
   const { active, register, link } = useDomet({
@@ -263,7 +263,7 @@ return (
   nextjs: `// app/section-nav.tsx
 'use client';
 
-import { useDomet } from 'domet';
+import { useDomet } from '@afterfivespace/domet';
 
 export function SectionNav() {
   const { ids, link } = useDomet({ selector: '[data-section]' });

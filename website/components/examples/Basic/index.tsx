@@ -1,6 +1,6 @@
 "use client";
 
-import { useDomet } from "domet";
+import { useDomet } from "@afterfivespace/domet";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { focusRing } from "../shared";

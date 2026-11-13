@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 domet is a React scroll-spy hook library. The monorepo contains:
-- `packages/domet`: The npm package (`useDomet` for scroll tracking, `useElementScroll` to scroll any element into view)
+- `packages/domet`: The npm package, published as `@afterfivespace/domet` (`useDomet` for scroll tracking, `useElementScroll` to scroll any element into view)
 - `website`: Next.js documentation site using Fumadocs, with live examples under `/examples/*`
 
 ## Commands
@@ -40,7 +40,7 @@ npm run build        # Production build
 npm run typecheck    # tsc --noEmit
 ```
 
-The website imports `domet` from `packages/domet/dist`: rebuild the package (`npm run build -w packages/domet`) to see library changes in the examples.
+The website imports `@afterfivespace/domet` from `packages/domet/dist`: rebuild the package (`npm run build -w packages/domet`) to see library changes in the examples.
 
 CI (`.github/workflows/ci.yml`) runs lint, build, typecheck, tests and the size check, plus the tests against React 19.
 
@@ -88,8 +88,8 @@ Key constants (`constants.ts`):
 ## Package Exports
 
 ```typescript
-import { useDomet, useElementScroll, VALIDATION_LIMITS } from 'domet';
-import type { DometOptions, UseDometReturn } from 'domet';
+import { useDomet, useElementScroll, VALIDATION_LIMITS } from '@afterfivespace/domet';
+import type { DometOptions, UseDometReturn } from '@afterfivespace/domet';
 ```
 
 ## Testing

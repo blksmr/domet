@@ -6,6 +6,7 @@ All notable changes to this project will be documented in this file.
 
 ### Breaking
 
+- The package is now published as `@afterfivespace/domet`. Install it with `npm install @afterfivespace/domet` and update your imports.
 - Removed `tracking.throttle`. The active section is recalculated at most once per animation frame.
 - `onActive` fires as soon as `scrollTo` or `link` changes the active section. `onEnter` and `onLeave` fire when the locked scroll ends.
 - When no section is in view, the closest section above the viewport stays active (the closest below if there is none). The first section used to take over.

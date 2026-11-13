@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef, useState } from "react";
-import { useDomet, type UseDometReturn } from "domet";
+import { useDomet, type UseDometReturn } from "@afterfivespace/domet";
 import { cn } from "@/lib/utils";
 import {
   ProgressLine,

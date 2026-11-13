@@ -7,7 +7,7 @@ import Link from "next/link";
 const PROJECT_LINKS = [
   { name: "GitHub", href: "https://github.com/blksmr/domet" },
   { name: "X (Twitter)", href: "https://x.com/blkasmir" },
-  { name: "NPM", href: "https://www.npmjs.com/package/domet" },
+  { name: "NPM", href: "https://www.npmjs.com/package/@afterfivespace/domet" },
   { name: "llms.txt", href: "/llms.txt" },
 ];
 

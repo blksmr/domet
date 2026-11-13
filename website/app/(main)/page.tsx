@@ -21,7 +21,7 @@ export default function Page() {
       <header className="flex w-full mb-6">
         <div className="flex gap-2 items-center font-medium">{APP_NAME}</div>
         <div className="flex items-center gap-3 ml-auto">
-          <Link className="flex items-center text-xs text-muted hover:text-hover no-underline" href={`https://www.npmjs.com/package/domet`} title="View on npm">
+          <Link className="flex items-center text-xs text-muted hover:text-hover no-underline" href={`https://www.npmjs.com/package/@afterfivespace/domet`} title="View on npm">
             v{packageJson.version}
           </Link>
           <HeaderMenu />
