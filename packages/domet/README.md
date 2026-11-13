@@ -53,21 +53,22 @@ function Page() {
 | Prop | Type | Default | Description |
 |------|------|---------|-------------|
 | `ids` | `string[]` | — | Array of section IDs to track (mutually exclusive with selector) |
-| `selector` | `string` | — | CSS selector to find sections (mutually exclusive with ids) |
+| `selector` | `string` | — | CSS selector to find sections (mutually exclusive with ids). With a container, only sections inside it are matched |
 | `container` | `RefObject<HTMLElement \| null>` | `undefined` | React ref to scrollable container (defaults to window). Assumed stable for the lifetime of the hook — remount to change it |
-| `tracking` | `TrackingOptions` | `undefined` | Tracking configuration (offset, threshold, hysteresis, throttle) |
+| `tracking` | `TrackingOptions` | `undefined` | Tracking configuration (offset, threshold, hysteresis) |
 | `scrolling` | `ScrollingOptions` | `undefined` | Default scroll behavior for link/scrollTo (behavior, offset, position, lockActive) |
 | `onActive` | `(id: string \| null, prevId: string \| null) => void` | `undefined` | Called when active section changes |
 | `onEnter` | `(id: string) => void` | `undefined` | Called when a section enters the viewport |
 | `onLeave` | `(id: string) => void` | `undefined` | Called when a section leaves the viewport |
 | `onScrollStart` | `() => void` | `undefined` | Called when scrolling starts |
-| `onScrollEnd` | `() => void` | `undefined` | Called when scrolling stops (after 100ms of inactivity) |
+| `onScrollEnd` | `() => void` | `undefined` | Called when scrolling stops (`scrollend` event, or after 100ms of inactivity where `scrollend` is unsupported) |
+| `debug` | `boolean` | `false` | Show a floating debug panel to inspect the state and tune the options live |
 
 `tracking.offset` and `scrolling.offset` serve different purposes:
 - **`tracking.offset`**: Defines the trigger line position (where section detection happens). A value of `100` means the line sits 100px from the top of the viewport. Sections crossing this line are candidates for "active".
 - **`scrolling.offset`**: Only affects programmatic scrolling (`link`/`scrollTo`). It shifts where the section lands after navigation. Has no effect on detection.
 
-Tracking defaults are `offset: 0`, `threshold: 0.6`, `hysteresis: 150`, and `throttle: 10` (ms). `scrolling.behavior` defaults to `auto`, which resolves to `smooth` unless `prefers-reduced-motion` is enabled (then `instant`).
+Tracking defaults are `offset: 0`, `threshold: 0.6`, and `hysteresis: 150`. Recalculations run at most once per animation frame. When no section is in view (a tall footer, or a gap between two sections), the closest section above the viewport stays active; before the first section, the closest one below is used. `scrolling.behavior` defaults to `auto`, which resolves to `smooth` unless `prefers-reduced-motion` is enabled (then `instant`).
 
 IDs are sanitized: non-strings, empty values, and duplicates are ignored. Passing both `ids` and `selector` logs a warning in development; `selector` is ignored.
 
@@ -79,7 +80,13 @@ All tracking values are validated at runtime. Out-of-range values are clamped wi
 | `offset (%)` | `-500% to 500%` | `0` | Percentage of viewport height |
 | `threshold` | `0 to 1` | `0.6` | Minimum visibility ratio for high-score detection |
 | `hysteresis` | `0 to 1000` | `150` | Score margin required to switch active section |
-| `throttle` | `0 to 1000 ms` | `10` | Minimum interval between recalculations |
+
+The same limits are exported as `VALIDATION_LIMITS`, for example to validate a settings form before passing values to the hook:
+
+```ts
+import { VALIDATION_LIMITS } from 'domet'
+const { min, max } = VALIDATION_LIMITS.hysteresis // 0 and 1000
+```
 
 ### Callbacks
 
@@ -91,7 +98,11 @@ All tracking values are validated at runtime. Out-of-range values are clamped wi
 | `onScrollStart` | `() => void` | Called when scrolling starts |
 | `onScrollEnd` | `() => void` | Called when scrolling stops |
 
-When `lockActive` is enabled during a programmatic scroll, `onActive`, `onEnter`, and `onLeave` do not fire until the scroll completes. `onScrollStart` and `onScrollEnd` still fire normally. `onScrollEnd` fires after `100` ms of scroll inactivity.
+When `lockActive` is enabled during a programmatic scroll, `onActive` fires as soon as the target section becomes active, while `onEnter` and `onLeave` are held until the scroll completes and then fire for the sections that entered or left the viewport. `onScrollStart` and `onScrollEnd` still fire normally.
+
+After a programmatic scroll, the target section stays active until the user scrolls again, even where another section would win at that position.
+
+`onActive` also fires when the active section disappears (its id leaves `ids`, or its element no longer matches `selector`): the first remaining section becomes active, or `null` if none is left. The first active section, set on mount or when the first section is resolved, is not reported. `onScrollEnd` fires on the native `scrollend` event, or after `100` ms of scroll inactivity in browsers without `scrollend`.
 
 ### Return Value
 
@@ -106,8 +117,29 @@ When `lockActive` is enabled during a programmatic scroll, `onActive`, `onEnter`
 | `sections` | `Record<string, SectionState>` | Per-section state indexed by ID |
 | `register` | `(id: string) => RegisterProps` | Props to spread on section elements (includes id, ref, data-domet) |
 | `link` | `(id: string, options?: ScrollToOptions) => LinkProps` | Nav props (onClick, aria-current, data-active) with optional scroll overrides |
-| `navRef` | `(id: string, options?: NavRefOptions) => (el: HTMLElement \| null) => void` | Ref callback for nav items; auto-scrolls active item into view in scrollable nav containers |
+| `navRef` | `(id: string, options?: NavRefOptions) => (el: HTMLElement \| null) => void` | Ref callback for nav items; scrolls the nearest scrollable ancestor of the active item to keep it visible. The page and the tracked container are never scrolled |
 | `scrollTo` | `(target: ScrollTarget, options?: ScrollToOptions) => void` | Programmatically scroll to a section or absolute scroll position |
+
+The component re-renders on scroll only when a value it reads changes. A component that reads `active` but not `scroll`, `progress`, `direction`, or `sections` does not re-render on every frame. Spreading the return value reads every field. Values read outside render (event handlers, effects) are always current, and reading a field subscribes the component to it.
+
+Cached section positions are refreshed when a section or the container is resized, or when the scrollable height changes.
+
+### useElementScroll
+
+A standalone hook, independent from section tracking, that scrolls any rendered element into view.
+
+```tsx
+const { scrollTo } = useElementScroll({ behavior: 'auto', position: 'center' })
+```
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `behavior` | `'smooth' \| 'instant' \| 'auto'` | `'auto'` | Scroll animation ('auto' respects prefers-reduced-motion) |
+| `position` | `'top' \| 'center' \| 'bottom'` | `'center'` | Vertical alignment of the element |
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `scrollTo` | `(target: ElementScrollTarget, options?: ElementScrollOptions) => void` | Scroll an element or a resolved element into view, with optional per-call overrides |
 
 ### Types
 
@@ -120,11 +152,10 @@ type TrackingOptions = {
   offset?: number | `${number}%`
   threshold?: number
   hysteresis?: number
-  throttle?: number
 }
 ```
 
-Defaults: `offset: 0`, `threshold: 0.6`, `hysteresis: 150`, `throttle: 10` (ms).
+Defaults: `offset: 0`, `threshold: 0.6`, `hysteresis: 150`.
 
 ### ScrollingOptions
 
@@ -139,7 +170,7 @@ type ScrollingOptions = {
 }
 ```
 
-If `position` is omitted for ID targets, Domet uses a dynamic alignment that keeps the trigger line within the section and prefers centering sections that fit in the viewport. When `position: "center"` is set, sections that fit in the viewport are centered; sections taller than the viewport align to the top instead (respecting `scrolling.offset`).
+If `position` is omitted for ID targets, Domet uses a dynamic alignment that keeps the trigger line within the section and prefers centering sections that fit in the viewport. Prefer this default when sections are shorter than the viewport: with `position: "top"`, a short section can sit at the top while the trigger line is already inside the next one. The first section scrolls to the very top and the last section to the very bottom, as long as the section stays visible there. When `position: "center"` is set, sections that fit in the viewport are centered; sections taller than the viewport align to the top instead (respecting `scrolling.offset`).
 
 ### NavRefOptions
 
@@ -155,7 +186,7 @@ type NavRefOptions = {
 
 - `behavior`: Scroll animation (`'auto'` respects `prefers-reduced-motion`). Default: `'auto'`.
 - `offset`: Pixel offset from container edge when scrolling nav items. Default: `0`.
-- `position`: Alignment within the scrollable container. Default: `'nearest'`.
+- `position`: Vertical alignment within the scrollable container. Default: `'nearest'`. Horizontal navs always use `'nearest'`.
 
 ### ScrollState
 
@@ -165,8 +196,8 @@ Global scroll information updated on every scroll event.
 type ScrollState = {
   y: number                        // Current scroll position in pixels
   progress: number                 // Overall scroll progress (0-1)
-  direction: 'up' | 'down' | null  // Scroll direction
-  velocity: number                 // Scroll speed
+  direction: 'up' | 'down' | null  // Scroll direction (null when idle)
+  velocity: number                 // Scroll speed in px/ms, rounded (0 when idle)
   scrolling: boolean               // True while actively scrolling
   maxScroll: number                // Maximum scroll value
   viewportHeight: number           // Viewport height in pixels
@@ -223,6 +254,19 @@ type ScrollToOptions = {
 By default, `lockActive` is enabled for id targets and disabled for `{ top }`.
 
 If `scrollTo` is called with an unknown ID or an element that is not yet mounted, a development warning is logged and the call is ignored. Invalid `top` values (non-finite numbers) are also rejected with a warning.
+
+### ElementScrollOptions
+
+Options for `useElementScroll`, as hook defaults or per-call overrides.
+
+```ts showLineNumbers
+type ElementScrollOptions = {
+  behavior?: 'smooth' | 'instant' | 'auto'
+  position?: 'top' | 'center' | 'bottom'
+}
+
+type ElementScrollTarget = HTMLElement | (() => HTMLElement | null | undefined)
+```
 
 ### Examples
 
@@ -316,6 +360,50 @@ return (
 )
 ```
 
+### Scroll an Arbitrary Element
+
+`useElementScroll` scrolls any rendered element into view, letting the browser move every nested scrollable ancestor as needed:
+
+```tsx showLineNumbers
+import { useRef } from 'react'
+import { useElementScroll } from 'domet'
+
+function Form() {
+  const fieldRef = useRef<HTMLDivElement>(null)
+  const { scrollTo } = useElementScroll({ position: 'center' })
+
+  const showField = () => {
+    scrollTo(() => fieldRef.current)
+  }
+
+  return <div ref={fieldRef}>...</div>
+}
+```
+
+The target can be an element or a resolver. Resolver evaluation starts on the next animation frame and briefly retries an unresolved target, which is useful when React renders it in response to the same event. A newer request cancels any pending request.
+
+### Debug Mode
+
+Turn on `debug` while you build to see what the hook is doing and to tune it without editing code:
+
+```tsx showLineNumbers
+const { active, register, link } = useDomet({
+  ids: ['intro', 'features', 'api'],
+  debug: process.env.NODE_ENV !== 'production',
+})
+```
+
+A round button appears at the bottom right of the page. It opens a panel, which also works on touch screens, with:
+
+- **State**: the active section, progress, direction, velocity and trigger line position, updated as you scroll.
+- **Tracking** and **Scrolling**: `offset`, `threshold`, `hysteresis`, `behavior`, `position` and `lockActive`. A change applies at once and overrides the option passed in code for as long as debug is on. Reset returns to your options.
+- **Overlays**: drawn on the page. Trigger Line shows the line the hook measures against and Section Outlines frames the tracked sections. Section Scores shows why the active section is the active one: every section in view is tinted by its score and labelled with what that score is made of (visibility, trigger line, distance to the line) and the score it has to beat to take over.
+- **Sections**: the tracked sections and how much of each is visible. Select one to scroll to it.
+- **Events**: the callbacks as they fire.
+- **Copy Options**: copy the current `tracking` and `scrolling` values, ready to paste into the hook.
+
+The panel is loaded on demand, so it adds nothing to your bundle when `debug` is off. When the tracked `container` sits inside a modal `<dialog>`, the panel moves into that dialog so it stays reachable.
+
 ### Third-party Components
 
 If a third-party component only accepts a `ref` prop (no spread), extract the ref from `register`:
@@ -326,7 +414,7 @@ If a third-party component only accepts a `ref` prop (no spread), extract the re
 
 ### CSS Selector for Sections
 
-Instead of passing an array of IDs, you can use the `selector` prop to automatically find sections:
+Instead of passing an array of IDs, you can use the `selector` prop to automatically find sections. Elements added to or removed from the DOM are picked up automatically:
 
 ```tsx showLineNumbers
 const { active, ids } = useDomet({
@@ -355,7 +443,7 @@ useDomet({
 
 ### Why domet?
 
-This library was born from a real need at work. I wanted a scroll-spy solution that was powerful and completely headless, but above all, extremely lightweight. No bloated dependencies, no opinionated styling, just a hook that does one thing well.
+This library grew out of repetition. As a freelancer, I kept rewriting the same scroll-tracking hooks by hand, project after project. I wanted a scroll-spy solution that was powerful and completely headless, but above all, extremely lightweight. No bloated dependencies, no opinionated styling, just a hook that does one thing well.
 
 Most scroll-spy libraries ship with their own components, their own CSS, their own opinions about your DOM structure. You end up fighting the library instead of building your UI. Override this class, wrap that element, pass a `renderItem` prop just to change a `<div>` into a `<button>`. It's exhausting. Headless means none of that. You get raw data — which section is active, how far you've scrolled, what's in view — and you do whatever you want with it. Your markup, your styles, your framework, zero compromises.
 

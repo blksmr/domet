@@ -5,8 +5,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 domet is a React scroll-spy hook library. The monorepo contains:
-- `packages/domet`: The npm package (React hook for scroll tracking)
-- `website`: Next.js documentation site using Fumadocs
+- `packages/domet`: The npm package (`useDomet` for scroll tracking, `useElementScroll` to scroll any element into view)
+- `website`: Next.js documentation site using Fumadocs, with live examples under `/examples/*`
 
 ## Commands
 
@@ -15,7 +15,9 @@ domet is a React scroll-spy hook library. The monorepo contains:
 npm run dev          # Run all dev servers
 npm run build        # Build all packages
 npm run lint         # Lint all packages
+npm run typecheck    # Typecheck all packages
 npm run test         # Run all tests
+npm run release      # Lint, typecheck, test, build, check size, then publish domet
 ```
 
 ### Package: domet
@@ -25,7 +27,9 @@ npm run build        # Compile TypeScript
 npm run dev          # Watch mode
 npm test             # Run Vitest tests
 npm test -- --watch  # Watch mode
-npm test -- useDomet.test.tsx  # Single test file
+npm test -- scoring.test.ts  # Single test file
+npm run typecheck    # tsc --noEmit
+npm run lint         # ESLint check (lint:fix to apply fixes)
 ```
 
 ### Website
@@ -33,40 +37,64 @@ npm test -- useDomet.test.tsx  # Single test file
 cd website
 npm run dev          # Next.js dev with Turbopack
 npm run build        # Production build
+npm run typecheck    # tsc --noEmit
 ```
+
+The website imports `domet` from `packages/domet/dist`: rebuild the package (`npm run build -w packages/domet`) to see library changes in the examples.
+
+CI (`.github/workflows/ci.yml`) runs lint, build, typecheck, tests and the size check, plus the tests against React 19.
 
 ## Architecture
 
-### Hook Algorithm (`useDomet.ts`)
+### Source Layout (`packages/domet/src`)
+
+- `useDomet/index.ts`: public hook, wires the four internal hooks and the store
+- `useDomet/hooks/useSectionResolver.ts`: resolves sections from `ids` (refs) or `selector` (MutationObserver)
+- `useDomet/hooks/useScrollDetection.ts`: scroll, resize and `scrollend` listeners, active section, callbacks
+- `useDomet/hooks/useProgrammaticScroll.ts`: `scrollTo`, active lock during programmatic scrolls
+- `useDomet/hooks/useNavAutoScroll.ts`: `navRef`, scrolls the nav container only
+- `useDomet/store.ts`: external store, per-field render tracking, on-demand `sections`
+- `useElementScroll/index.ts`: standalone hook
+- `debug/`: the panel behind the `debug` option. Plain DOM in a shadow root, no React, loaded with a dynamic `import()` so it stays out of the core bundle. It must not import runtime code from the rest of `src` (types only): a shared import would make the bundler split the entry file. `debug/explain.ts` therefore mirrors the scoring rules of `utils/scoring.ts`; `__tests__/debug.explain.test.ts` fails when the two drift apart, so update both together
+- `utils/`: scoring, resolvers, validation (pure functions)
+
+### Hook Algorithm (`src/useDomet/`, `src/utils/scoring.ts`)
 
 The hook uses a **scoring system** to determine the active section:
 1. **Visibility score**: Sections with >60% visibility get bonus points
 2. **Trigger line proximity**: Sections crossing the trigger line (offset from top) get priority
 3. **Hysteresis**: A 150-point margin prevents rapid switching between sections
 4. **Edge cases**: Top/bottom of page forces first/last section active
+5. **No section in view**: The closest section above the viewport stays active (the closest below if none)
+6. **After a programmatic scroll**: The target stays active until the scroll position changes again
 
-Key constants:
-- `VISIBILITY_THRESHOLD = 0.6` (60% visibility required for high score)
-- `HYSTERESIS_SCORE_MARGIN = 150` (score difference needed to switch sections)
+Key constants (`constants.ts`):
+- `DEFAULT_THRESHOLD = 0.6` (60% visibility required for high score)
+- `DEFAULT_HYSTERESIS = 150` (score difference needed to switch sections)
 
 ### Performance
 
 - `requestAnimationFrame` for smooth 60fps updates
-- Throttling with configurable `debounceMs` (default 10ms)
+- At most one recalculation per animation frame
+- Scroll state lives in an external store (`useSyncExternalStore`); a component re-renders only for the fields it reads, and `sections` is built on demand
 - Refs stored in `useRef` to avoid re-renders
 - `useMemo` for stable section ID arrays
 - The container ref is assumed stable for the lifetime of the hook; remount the hook to change it
 
+### Bundle Size
+
+`npm run size -w packages/domet` checks two budgets: the core (`dist/es/index.mjs`, 7 kB) and the debug panel chunk (8 kB). The core is close to its limit: keep debug-related code in `src/debug/`, not in the hooks.
+
 ## Package Exports
 
 ```typescript
-import { useDomet } from 'domet';
+import { useDomet, useElementScroll, VALIDATION_LIMITS } from 'domet';
 import type { DometOptions, UseDometReturn } from 'domet';
 ```
 
 ## Testing
 
-Tests use Vitest with jsdom. Mock `IntersectionObserver` and `getBoundingClientRect` for scroll simulation.
+Tests use Vitest with jsdom. Mock `ResizeObserver` and `getBoundingClientRect` for scroll simulation (helpers in `src/__tests__/helpers.tsx`). jsdom declares `onscrollend` but never fires it: dispatch `scrollend` manually.
 
 ## Code Style Rules
 
@@ -110,6 +138,29 @@ Instead of passing an array of IDs, you can use a CSS selector to automatically 
 ≤2 lines → ```tsx
 >2 lines → ```tsx showLineNumbers
 ```
+
+## Website Examples
+
+Examples live in `website/components/examples/<Name>/index.tsx`, each with a page in `website/app/examples/<name>/page.tsx` and an entry in `EXAMPLES` (`website/components/HeaderMenu.tsx`). Only `Basic` is embedded in the documentation. Each example shows one capability; do not add an example that an existing one already covers.
+
+- `Basic`: `register`, `link`, scroll state
+- `Debug`: the `debug` option and its panel
+- `DynamicOffset`: `tracking.offset` following a resizing header
+- `ElementScroll`: `useElementScroll`
+- `ModalForm`: `container` inside a dialog
+- `Reveal`: `sections[id].visibility` driving a reveal
+- `TreeView`: long nested navigation with `navRef`
+
+Rules for examples:
+
+1. **Same look as the site**: use the theme tokens only (`text`, `subtle`, `muted`, `border`, `field`, `danger`, `secondary`, `background`) and the type scale (`text-xs` to `text-lg`). No other colors, no emoji icons.
+2. **Shared pieces**: reuse `website/components/examples/shared.tsx` (focus ring, nav item, inputs, buttons, `Prose`, `Metric`, `ProgressLine`).
+3. **No `transition-delay`**: no `transitionDelay`, no `delay-*` class, no staggered reveal.
+4. **No transition on values that change every frame** (progress, visibility): set them directly.
+5. **A redesign changes the look, not the behavior**: keep what the example computes and how it reacts.
+6. **Headings**: `styles/main.css` adds a top margin to any heading that is neither first nor last child. Keep headings first in their wrapper.
+7. Check every example at 320, 375, 768, 1024 and 1440 px wide.
+8. Every example that calls `useDomet` sets `debug: true`. Keep the bottom right corner free: the debug button sits there, 16 px from both edges.
 
 ## Auto-Generated Files (DO NOT EDIT)
 
