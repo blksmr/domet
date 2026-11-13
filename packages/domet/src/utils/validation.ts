@@ -3,17 +3,14 @@ import {
   DEFAULT_OFFSET,
   DEFAULT_THRESHOLD,
   DEFAULT_HYSTERESIS,
-  DEFAULT_THROTTLE,
+  PERCENT_REGEX,
 } from "../constants";
-
-const PERCENT_REGEX = /^(-?\d+(?:\.\d+)?)%$/;
 
 export const VALIDATION_LIMITS = {
   offset: { min: -10000, max: 10000 },
   offsetPercent: { min: -500, max: 500 },
   threshold: { min: 0, max: 1 },
   hysteresis: { min: 0, max: 1000 },
-  throttle: { min: 0, max: 1000 },
 } as const;
 
 function warn(message: string): void {
@@ -108,25 +105,6 @@ export function sanitizeHysteresis(hysteresis: number | undefined): number {
   }
 
   return hysteresis;
-}
-
-export function sanitizeThrottle(throttle: number | undefined): number {
-  if (throttle === undefined) {
-    return DEFAULT_THROTTLE;
-  }
-
-  if (!isFiniteNumber(throttle)) {
-    warn(`Invalid throttle value: ${throttle}. Using default.`);
-    return DEFAULT_THROTTLE;
-  }
-
-  const { min, max } = VALIDATION_LIMITS.throttle;
-  if (throttle < min || throttle > max) {
-    warn(`Throttle ${throttle} clamped to [${min}, ${max}].`);
-    return clamp(throttle, min, max);
-  }
-
-  return throttle;
 }
 
 export function sanitizeIds(ids: string[] | undefined): string[] {

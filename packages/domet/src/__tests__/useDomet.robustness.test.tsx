@@ -114,41 +114,6 @@ describe("cleanup on unmount", () => {
     vi.useRealTimers();
   });
 
-  it("clears throttle timeout on unmount", () => {
-    vi.useFakeTimers();
-
-    function Component() {
-      const containerRef = useRef<HTMLDivElement | null>(null);
-      useDomet({ ids: ["a"], container: containerRef, tracking: { throttle: 50 } });
-      return (
-        <div ref={containerRef} data-testid="container">
-          <div data-domet="a" />
-        </div>
-      );
-    }
-
-    const { unmount } = render(<Component />);
-    const container = screen.getByTestId("container");
-    setContainerMetrics(container as HTMLDivElement);
-
-    act(() => { vi.runAllTimers(); });
-
-    // Trigger scroll to start throttle timer
-    act(() => {
-      container.dispatchEvent(new Event("scroll"));
-    });
-
-    // Unmount while throttle is active — should not throw
-    unmount();
-
-    // Advance timers to confirm nothing fires after unmount
-    expect(() => {
-      act(() => { vi.runAllTimers(); });
-    }).not.toThrow();
-
-    vi.useRealTimers();
-  });
-
   it("disconnects MutationObserver on unmount (selector mode)", () => {
     const disconnectSpy = vi.fn();
     const originalMO = globalThis.MutationObserver;
@@ -169,22 +134,6 @@ describe("cleanup on unmount", () => {
 
     expect(disconnectSpy).toHaveBeenCalled();
     globalThis.MutationObserver = originalMO;
-  });
-});
-
-// ─── SSR safety ───
-
-describe("SSR safety", () => {
-  it("does not crash when window is undefined", () => {
-    const originalWindow = globalThis.window;
-    // @ts-expect-error — simulating SSR by removing window
-    delete (globalThis as Record<string, unknown>).window;
-
-    // The hook uses typeof window === "undefined" checks
-    // We verify the module can be imported and the exported function exists
-    expect(typeof useDomet).toBe("function");
-
-    globalThis.window = originalWindow;
   });
 });
 
@@ -408,6 +357,30 @@ describe("runtime warnings", () => {
     expect(warnSpy).toHaveBeenCalledWith(
       expect.stringContaining("Both `ids` and `selector`"),
     );
+
+    warnSpy.mockRestore();
+  });
+
+  it("ignores selector when both ids and selector are provided", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    function Component() {
+      const { ids, register } = useDomet({
+        ids: ["a"],
+        selector: "[data-section]",
+      } as unknown as DometOptions);
+      return (
+        <>
+          <output data-testid="ids">{ids.join(",")}</output>
+          <div {...register("a")} />
+          <div id="x" data-section />
+        </>
+      );
+    }
+
+    render(<Component />);
+
+    expect(screen.getByTestId("ids").textContent).toBe("a");
 
     warnSpy.mockRestore();
   });

@@ -1,6 +1,17 @@
-import { useCallback, useEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 
 import type {
+  DebugEventType,
+  DebugHandle,
+  DebugOverrides,
+  DebugView,
   DometOptions,
   LinkProps,
   Offset,
@@ -13,32 +24,57 @@ import {
   sanitizeOffset,
   sanitizeThreshold,
   sanitizeHysteresis,
-  sanitizeThrottle,
   sanitizeIds,
   sanitizeSelector,
   useIsomorphicLayoutEffect,
   areIdInputsEqual,
+  VALIDATION_LIMITS,
 } from "../utils";
+import { PERCENT_REGEX } from "../constants";
+import { resolveScrollBehavior } from "../utils/scrolling";
 
 import { useSectionResolver } from "./hooks/useSectionResolver";
 import { useScrollDetection } from "./hooks/useScrollDetection";
 import { useNavAutoScroll } from "./hooks/useNavAutoScroll";
 import { useProgrammaticScroll } from "./hooks/useProgrammaticScroll";
+import {
+  createDometStore,
+  createTrackedScroll,
+  hasTrackedChange,
+  readSections,
+  type SectionsSource,
+  type TrackedKey,
+} from "./store";
 
 export function useDomet(options: DometOptions): UseDometReturn {
   const {
     container: containerInput,
-    tracking,
-    scrolling,
     onActive,
     onEnter,
     onLeave,
     onScrollStart,
     onScrollEnd,
+    debug = false,
   } = options;
 
+  const [debugOverrides, setDebugOverrides] = useState<DebugOverrides | null>(
+    null,
+  );
+  const debugHandleRef = useRef<DebugHandle | null>(null);
+  const debugViewRef = useRef<DebugView | null>(null);
+  const tracking = debugOverrides
+    ? { ...options.tracking, ...debugOverrides.tracking }
+    : options.tracking;
+  const inputScrolling = options.scrolling;
+  const scrolling = useMemo(
+    () =>
+      debugOverrides
+        ? { ...inputScrolling, ...debugOverrides.scrolling }
+        : inputScrolling,
+    [inputScrolling, debugOverrides],
+  );
+
   const trackingOffset = sanitizeOffset(tracking?.offset);
-  const throttle = sanitizeThrottle(tracking?.throttle);
   const threshold = sanitizeThreshold(tracking?.threshold);
   const hysteresis = sanitizeHysteresis(tracking?.hysteresis);
   const scrollingDefaults = useMemo(() => {
@@ -68,42 +104,55 @@ export function useDomet(options: DometOptions): UseDometReturn {
     console.warn("[domet] Both `ids` and `selector` were provided. Only one should be used. `selector` will be ignored.");
   }
 
-  const idsCacheRef = useRef<{
-    raw: unknown;
-    sanitized: string[] | undefined;
-  }>({ raw: undefined, sanitized: undefined });
+  const [stableRawIds, setStableRawIds] = useState(rawIds);
+  if (!areIdInputsEqual(rawIds, stableRawIds)) {
+    setStableRawIds(rawIds);
+  }
 
-  const idsArray = useMemo(() => {
-    if (rawIds === undefined) {
-      idsCacheRef.current = { raw: undefined, sanitized: undefined };
-      return undefined;
-    }
-
-    if (areIdInputsEqual(rawIds, idsCacheRef.current.raw)) {
-      idsCacheRef.current.raw = rawIds;
-      return idsCacheRef.current.sanitized;
-    }
-
-    const sanitized = sanitizeIds(rawIds);
-    idsCacheRef.current = { raw: rawIds, sanitized };
-    return sanitized;
-  }, [rawIds]);
+  const idsArray = useMemo(
+    () => (stableRawIds === undefined ? undefined : sanitizeIds(stableRawIds)),
+    [stableRawIds],
+  );
 
   const selectorString = useMemo(() => {
     if (rawSelector === undefined) return undefined;
     return sanitizeSelector(rawSelector);
   }, [rawSelector]);
-  const useSelector = selectorString !== undefined && selectorString !== "";
+  const useSelector =
+    idsArray === undefined &&
+    selectorString !== undefined &&
+    selectorString !== "";
 
   const initialActiveId = idsArray && idsArray.length > 0 ? idsArray[0] : null;
 
   // Shared refs
   const isProgrammaticScrolling = useRef<boolean>(false);
+  const heldScrollPosition = useRef<number | null>(null);
   const cacheValidRef = useRef<boolean>(false);
   const recalculateRef = useRef<() => void>(() => {});
   const rafId = useRef<number | null>(null);
   const scrollCleanupRef = useRef<(() => void) | null>(null);
   const optionsRef = useRef({ trackingOffset, scrolling: scrollingDefaults });
+  const [store] = useState(createDometStore);
+  const [trackedKeys] = useState(() => new Set<TrackedKey>());
+  const sectionsSourceRef = useRef<SectionsSource | null>(null);
+
+  const subscribeToTrackedChanges = useCallback(
+    (onStoreChange: () => void) =>
+      store.subscribe((prev, next) => {
+        if (hasTrackedChange(trackedKeys, prev, next)) onStoreChange();
+      }),
+    [store, trackedKeys],
+  );
+  const snapshot = useSyncExternalStore(
+    subscribeToTrackedChanges,
+    store.getState,
+    store.getState,
+  );
+  const trackedScroll = useMemo(
+    () => createTrackedScroll(snapshot.scroll, trackedKeys, store.getState),
+    [snapshot.scroll, trackedKeys, store],
+  );
   const callbackRefs = useRef({
     onActive,
     onEnter,
@@ -113,10 +162,7 @@ export function useDomet(options: DometOptions): UseDometReturn {
   });
 
   const scheduleRecalculate = useCallback(() => {
-    if (typeof window === "undefined") return;
-    if (rafId.current) {
-      cancelAnimationFrame(rafId.current);
-    }
+    if (typeof window === "undefined" || rafId.current !== null) return;
     rafId.current = requestAnimationFrame(() => {
       rafId.current = null;
       recalculateRef.current();
@@ -130,35 +176,54 @@ export function useDomet(options: DometOptions): UseDometReturn {
 
   useEffect(() => {
     scheduleRecalculate();
-  }, [trackingOffset, scheduleRecalculate]);
+  }, [trackingOffset, threshold, hysteresis, scheduleRecalculate]);
 
   useIsomorphicLayoutEffect(() => {
-    callbackRefs.current = {
-      onActive,
-      onEnter,
-      onLeave,
-      onScrollStart,
-      onScrollEnd,
+    const tap =
+      <A extends unknown[]>(type: DebugEventType, callback?: (...args: A) => void) =>
+      (...args: A) => {
+        debugHandleRef.current?.event(type, args);
+        callback?.(...args);
+      };
+    callbackRefs.current = debug
+      ? {
+          onActive: tap("active", onActive),
+          onEnter: tap("enter", onEnter),
+          onLeave: tap("leave", onLeave),
+          onScrollStart: tap("scrollStart", onScrollStart),
+          onScrollEnd: tap("scrollEnd", onScrollEnd),
+        }
+      : { onActive, onEnter, onLeave, onScrollStart, onScrollEnd };
+  }, [debug, onActive, onEnter, onLeave, onScrollStart, onScrollEnd]);
+
+  useEffect(() => {
+    if (!debug) return;
+    let cancelled = false;
+    import("../debug").then(({ mountDebug }) => {
+      if (cancelled) return;
+      debugHandleRef.current = mountDebug({
+        limits: VALIDATION_LIMITS,
+        percentPattern: PERCENT_REGEX,
+        getView: () => debugViewRef.current as DebugView,
+        getScroll: () => store.getState().scroll,
+        getSections: () => readSections(store, sectionsSourceRef.current),
+        subscribe: (listener) => store.subscribe(listener),
+        setOverrides: setDebugOverrides,
+      });
+    });
+    return () => {
+      cancelled = true;
+      debugHandleRef.current?.destroy();
+      debugHandleRef.current = null;
+      setDebugOverrides(null);
     };
-  }, [onActive, onEnter, onLeave, onScrollStart, onScrollEnd]);
+  }, [debug, store]);
 
   const getResolvedBehavior = useCallback(
-    (behaviorOverride?: ScrollBehavior): ScrollBehavior => {
-      const b = behaviorOverride ?? optionsRef.current.scrolling.behavior;
-      if (b === "auto") {
-        if (
-          typeof window === "undefined" ||
-          typeof window.matchMedia !== "function"
-        ) {
-          return "smooth";
-        }
-        const prefersReducedMotion = window.matchMedia(
-          "(prefers-reduced-motion: reduce)",
-        ).matches;
-        return prefersReducedMotion ? "instant" : "smooth";
-      }
-      return b;
-    },
+    (behaviorOverride?: ScrollBehavior): ScrollBehavior =>
+      resolveScrollBehavior(
+        behaviorOverride ?? optionsRef.current.scrolling.behavior,
+      ),
     [],
   );
 
@@ -181,6 +246,7 @@ export function useDomet(options: DometOptions): UseDometReturn {
     initialActiveId,
     cacheValidRef,
     scheduleRecalculate,
+    callbackRefs,
   });
 
   // Hook B: Scroll detection
@@ -193,17 +259,19 @@ export function useDomet(options: DometOptions): UseDometReturn {
     [useSelector, selectorString, updateSectionsFromSelector],
   );
 
-  const { scroll, sections } = useScrollDetection({
+  useScrollDetection({
+    store,
+    trackedKeys,
+    sectionsSourceRef,
     containerElement,
     sectionIds,
-    sectionIndexMap,
     tracking: {
       offset: trackingOffset,
       threshold,
       hysteresis,
-      throttle,
     },
     isProgrammaticScrolling,
+    heldScrollPosition,
     activeIdRef,
     setActiveId,
     getCurrentSections,
@@ -224,14 +292,18 @@ export function useDomet(options: DometOptions): UseDometReturn {
     activeIdRef,
     setActiveId,
     isProgrammaticScrolling,
+    heldScrollPosition,
     scrollCleanupRef,
     optionsRef,
     getResolvedBehavior,
+    callbackRefs,
+    scheduleRecalculate,
   });
 
   // Hook D: Nav auto-scroll
   const { navRef } = useNavAutoScroll({
     activeId,
+    containerElement,
     getResolvedBehavior,
   });
 
@@ -250,13 +322,34 @@ export function useDomet(options: DometOptions): UseDometReturn {
     return sectionIndexMap.get(activeId) ?? -1;
   }, [activeId, sectionIndexMap]);
 
+  useEffect(() => {
+    if (!debug) return;
+    debugViewRef.current = {
+      active: activeId,
+      index,
+      ids: sectionIds,
+      container: containerElement,
+      tracking: { offset: trackingOffset, threshold, hysteresis },
+      scrolling: scrollingDefaults,
+      scrollTo,
+    };
+    debugHandleRef.current?.update();
+  });
+
   return {
     active: activeId,
     index,
-    progress: scroll.progress,
-    direction: scroll.direction,
-    scroll,
-    sections,
+    get progress() {
+      return trackedScroll.progress;
+    },
+    get direction() {
+      return trackedScroll.direction;
+    },
+    scroll: trackedScroll,
+    get sections() {
+      trackedKeys.add("sections");
+      return readSections(store, sectionsSourceRef.current);
+    },
     ids: sectionIds,
     scrollTo,
     register,

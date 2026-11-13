@@ -1,7 +1,8 @@
-import { startTransition, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import type {
   CachedSectionPosition,
+  DometCallbacks,
   Offset,
   ResolvedSection,
   ScrollState,
@@ -10,35 +11,35 @@ import type {
 import { DEFAULT_OFFSET, SCROLL_IDLE_MS } from "../../constants";
 import {
   buildSectionCache,
-  buildViewportRect,
   calculateSectionScores,
   determineActiveSection,
   resolveOffset,
 } from "../../utils";
-
-type CallbackRefs = {
-  onActive?: (id: string | null, prevId: string | null) => void;
-  onEnter?: (id: string) => void;
-  onLeave?: (id: string) => void;
-  onScrollStart?: () => void;
-  onScrollEnd?: () => void;
-};
+import {
+  buildSectionStates,
+  haveSectionsChanged,
+  type DometStore,
+  type SectionsSource,
+  type TrackedKey,
+} from "../store";
 
 type UseScrollDetectionParams = {
+  store: DometStore;
+  trackedKeys: Set<TrackedKey>;
+  sectionsSourceRef: React.MutableRefObject<SectionsSource | null>;
   containerElement: HTMLElement | null;
   sectionIds: string[];
-  sectionIndexMap: Map<string, number>;
   tracking: {
     offset: Offset;
     threshold: number;
     hysteresis: number;
-    throttle: number;
   };
   isProgrammaticScrolling: React.MutableRefObject<boolean>;
+  heldScrollPosition: React.MutableRefObject<number | null>;
   activeIdRef: React.MutableRefObject<string | null>;
   setActiveId: React.Dispatch<React.SetStateAction<string | null>>;
   getCurrentSections: () => ResolvedSection[];
-  callbackRefs: React.MutableRefObject<CallbackRefs>;
+  callbackRefs: React.MutableRefObject<DometCallbacks>;
   cacheValidRef: React.MutableRefObject<boolean>;
   recalculateRef: React.MutableRefObject<() => void>;
   scrollCleanupRef: React.MutableRefObject<(() => void) | null>;
@@ -51,17 +52,15 @@ type UseScrollDetectionParams = {
   };
 };
 
-type UseScrollDetectionReturn = {
-  scroll: ScrollState;
-  sections: Record<string, SectionState>;
-};
-
 export function useScrollDetection({
+  store,
+  trackedKeys,
+  sectionsSourceRef,
   containerElement,
   sectionIds,
-  sectionIndexMap,
   tracking,
   isProgrammaticScrolling,
+  heldScrollPosition,
   activeIdRef,
   setActiveId,
   getCurrentSections,
@@ -72,38 +71,21 @@ export function useScrollDetection({
   rafId,
   scheduleRecalculate,
   selector,
-}: UseScrollDetectionParams): UseScrollDetectionReturn {
-  const { offset: trackingOffset, threshold, hysteresis, throttle } = tracking;
-
-  const [scroll, setScroll] = useState<ScrollState>({
-    y: 0,
-    progress: 0,
-    direction: null,
-    velocity: 0,
-    scrolling: false,
-    maxScroll: 0,
-    viewportHeight: 0,
-    trackingOffset: 0,
-    triggerLine: 0,
-  });
-  const [sections, setSections] = useState<Record<string, SectionState>>({});
+}: UseScrollDetectionParams): void {
+  const { offset: trackingOffset, threshold, hysteresis } = tracking;
 
   const lastScrollY = useRef<number>(0);
-  const lastScrollTime = useRef<number>(Date.now());
-  const isThrottled = useRef<boolean>(false);
-  const throttleTimeoutId = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const hasPendingScroll = useRef<boolean>(false);
+  const lastScrollTime = useRef<number>(0);
   const isScrollingRef = useRef<boolean>(false);
   const scrollIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
   const prevSectionsInViewport = useRef<Set<string>>(new Set());
   const currentSectionsInViewport = useRef<Set<string>>(new Set());
-  const prevScrollStateRef = useRef<ScrollState | null>(null);
-  const prevSectionsStateRef = useRef<Record<string, SectionState> | null>(
-    null,
-  );
   const sectionCacheRef = useRef<CachedSectionPosition[]>([]);
+  const cachedScrollHeightRef = useRef<number>(0);
+  const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const observedElementsRef = useRef<Set<HTMLElement>>(new Set());
 
   const calculateActiveSection = useCallback(() => {
     const container = containerElement;
@@ -132,17 +114,30 @@ export function useScrollDetection({
     lastScrollTime.current = now;
 
     const currentSections = getCurrentSections();
-    if (currentSections.length === 0) return;
 
     if (
       !cacheValidRef.current ||
-      sectionCacheRef.current.length !== currentSections.length
+      sectionCacheRef.current.length !== currentSections.length ||
+      cachedScrollHeightRef.current !== scrollHeight
     ) {
       sectionCacheRef.current = buildSectionCache(currentSections, container);
+      cachedScrollHeightRef.current = scrollHeight;
       cacheValidRef.current = true;
+      const resizeObserver = resizeObserverRef.current;
+      if (resizeObserver) {
+        const elements = new Set(currentSections.map((s) => s.element));
+        if (container) elements.add(container);
+        for (const element of observedElementsRef.current) {
+          if (!elements.has(element)) resizeObserver.unobserve(element);
+        }
+        for (const element of elements) {
+          if (!observedElementsRef.current.has(element)) {
+            resizeObserver.observe(element);
+          }
+        }
+        observedElementsRef.current = elements;
+      }
     }
-
-    if (sectionCacheRef.current.length === 0) return;
 
     const effectiveOffset = resolveOffset(
       trackingOffset,
@@ -156,23 +151,28 @@ export function useScrollDetection({
       scrollHeight,
       effectiveOffset,
       visibilityThreshold: threshold,
-      scrollDirection,
-      sectionIndexMap,
     });
 
     const isProgrammatic = isProgrammaticScrolling.current;
 
-    const newActiveId = isProgrammatic
-      ? currentActiveId
-      : determineActiveSection(
-          scores,
-          sectionIds,
-          currentActiveId,
-          hysteresis,
-          scrollY,
-          viewportHeight,
-          scrollHeight,
-        );
+    const heldAt = heldScrollPosition.current;
+    const isHeld = heldAt !== null && Math.abs(scrollY - heldAt) < 1;
+    if (heldAt !== null && !isHeld) {
+      heldScrollPosition.current = null;
+    }
+
+    const newActiveId =
+      isProgrammatic || isHeld || scores.length === 0
+        ? currentActiveId
+        : determineActiveSection(
+            scores,
+            sectionIds,
+            currentActiveId,
+            hysteresis,
+            scrollY,
+            viewportHeight,
+            scrollHeight,
+          );
 
     if (!isProgrammatic && newActiveId !== currentActiveId) {
       activeIdRef.current = newActiveId;
@@ -180,7 +180,7 @@ export function useScrollDetection({
       callbackRefs.current.onActive?.(newActiveId, currentActiveId);
     }
 
-    if (!isProgrammatic) {
+    if (!isProgrammatic && scores.length > 0) {
       const currentInViewport = currentSectionsInViewport.current;
       currentInViewport.clear();
       for (const s of scores) {
@@ -209,18 +209,18 @@ export function useScrollDetection({
 
     const roundedY = Math.round(scrollY);
     const clampedProgress = Math.max(0, Math.min(1, scrollProgress));
-    const roundedVelocity = Math.round(velocity);
     const roundedMaxScroll = Math.round(maxScroll);
     const roundedViewportHeight = Math.round(viewportHeight);
     const roundedTrackingOffset = Math.round(effectiveOffset);
     const currentScrolling = isScrollingRef.current;
+    const direction = currentScrolling ? scrollDirection : null;
+    const roundedVelocity = currentScrolling ? Math.round(velocity) : 0;
 
-    const prev = prevScrollStateRef.current;
+    const prev = store.getState().scroll;
     const scrollChanged =
-      !prev ||
       prev.y !== roundedY ||
       prev.progress !== clampedProgress ||
-      prev.direction !== scrollDirection ||
+      prev.direction !== direction ||
       prev.velocity !== roundedVelocity ||
       prev.scrolling !== currentScrolling ||
       prev.maxScroll !== roundedMaxScroll ||
@@ -228,11 +228,12 @@ export function useScrollDetection({
       prev.trackingOffset !== roundedTrackingOffset ||
       prev.triggerLine !== triggerLine;
 
+    let nextScroll: ScrollState | undefined;
     if (scrollChanged) {
-      const newScrollState: ScrollState = {
+      nextScroll = {
         y: roundedY,
         progress: clampedProgress,
-        direction: scrollDirection,
+        direction,
         velocity: roundedVelocity,
         scrolling: currentScrolling,
         maxScroll: roundedMaxScroll,
@@ -240,81 +241,35 @@ export function useScrollDetection({
         trackingOffset: roundedTrackingOffset,
         triggerLine,
       };
-      prevScrollStateRef.current = newScrollState;
-      startTransition(() => {
-        setScroll(newScrollState);
-      });
     }
 
-    const prevSections = prevSectionsStateRef.current;
-    let sectionsChanged = !prevSections;
-
-    if (!sectionsChanged && prevSections) {
-      let countPrev = 0;
-      for (const key in prevSections) {
-        if (Object.prototype.hasOwnProperty.call(prevSections, key))
-          countPrev++;
+    const source: SectionsSource = {
+      scores,
+      cache: sectionCacheRef.current,
+      scrollY,
+      activeId: newActiveId,
+    };
+    let nextSections: Record<string, SectionState> | undefined;
+    if (trackedKeys.has("sections")) {
+      const prevSections = store.getState().sections;
+      if (haveSectionsChanged(prevSections, source)) {
+        nextSections = buildSectionStates(source);
       }
-      if (countPrev !== scores.length) {
-        sectionsChanged = true;
-      } else {
-        for (const s of scores) {
-          const ps = prevSections[s.id];
-          if (!ps) {
-            sectionsChanged = true;
-            break;
-          }
-          const roundedVisibility =
-            Math.round(s.visibilityRatio * 100) / 100;
-          const roundedProgress = Math.round(s.progress * 100) / 100;
-          const isActive =
-            s.id === (isProgrammatic ? currentActiveId : newActiveId);
-          const roundedTop = Math.round(s.bounds.top);
-          const roundedBottom = Math.round(s.bounds.bottom);
-          const roundedHeight = Math.round(s.bounds.height);
-          if (
-            ps.visibility !== roundedVisibility ||
-            ps.progress !== roundedProgress ||
-            ps.inView !== s.inView ||
-            ps.active !== isActive ||
-            ps.bounds.top !== roundedTop ||
-            ps.bounds.bottom !== roundedBottom ||
-            ps.bounds.height !== roundedHeight
-          ) {
-            sectionsChanged = true;
-            break;
-          }
-        }
-      }
+      source.built = nextSections ?? prevSections;
     }
+    sectionsSourceRef.current = source;
 
-    if (sectionsChanged) {
-      const newSections: Record<string, SectionState> = {};
-      const cache = sectionCacheRef.current;
-      for (let i = 0; i < scores.length; i++) {
-        const s = scores[i];
-        newSections[s.id] = {
-          bounds: {
-            top: Math.round(s.bounds.top),
-            bottom: Math.round(s.bounds.bottom),
-            height: Math.round(s.bounds.height),
-          },
-          visibility: Math.round(s.visibilityRatio * 100) / 100,
-          progress: Math.round(s.progress * 100) / 100,
-          inView: s.inView,
-          active:
-            s.id === (isProgrammatic ? currentActiveId : newActiveId),
-          rect: buildViewportRect(cache[i], scrollY),
-        };
-      }
-      prevSectionsStateRef.current = newSections;
-      startTransition(() => {
-        setSections(newSections);
+    if (nextScroll || nextSections) {
+      store.setState({
+        ...(nextScroll && { scroll: nextScroll }),
+        ...(nextSections && { sections: nextSections }),
       });
     }
   }, [
+    store,
+    trackedKeys,
+    sectionsSourceRef,
     sectionIds,
-    sectionIndexMap,
     trackingOffset,
     threshold,
     hysteresis,
@@ -323,6 +278,7 @@ export function useScrollDetection({
     activeIdRef,
     setActiveId,
     isProgrammaticScrolling,
+    heldScrollPosition,
     callbackRefs,
     cacheValidRef,
   ]);
@@ -332,51 +288,43 @@ export function useScrollDetection({
   useEffect(() => {
     const container = containerElement;
     const scrollTarget = container || window;
+    const scrollEndTarget = container || document;
+    const supportsScrollEnd = "onscrollend" in scrollEndTarget;
 
     const handleScrollEnd = (): void => {
+      if (!isScrollingRef.current) return;
       isScrollingRef.current = false;
-      setScroll((prev) => ({ ...prev, scrolling: false, direction: null }));
+      store.setState({
+        scroll: {
+          ...store.getState().scroll,
+          scrolling: false,
+          direction: null,
+          velocity: 0,
+        },
+      });
       callbackRefs.current.onScrollEnd?.();
     };
 
     const handleScroll = (): void => {
       if (!isScrollingRef.current) {
         isScrollingRef.current = true;
-        setScroll((prev) => ({ ...prev, scrolling: true }));
+        store.setState({
+          scroll: { ...store.getState().scroll, scrolling: true },
+        });
         callbackRefs.current.onScrollStart?.();
       }
 
-      if (scrollIdleTimeoutRef.current) {
-        clearTimeout(scrollIdleTimeoutRef.current);
-      }
-      scrollIdleTimeoutRef.current = setTimeout(
-        handleScrollEnd,
-        SCROLL_IDLE_MS,
-      );
-
-      if (isThrottled.current) {
-        hasPendingScroll.current = true;
-        return;
-      }
-
-      isThrottled.current = true;
-      hasPendingScroll.current = false;
-
-      if (throttleTimeoutId.current) {
-        clearTimeout(throttleTimeoutId.current);
+      if (!supportsScrollEnd) {
+        if (scrollIdleTimeoutRef.current) {
+          clearTimeout(scrollIdleTimeoutRef.current);
+        }
+        scrollIdleTimeoutRef.current = setTimeout(
+          handleScrollEnd,
+          SCROLL_IDLE_MS,
+        );
       }
 
       scheduleRecalculate();
-
-      throttleTimeoutId.current = setTimeout(() => {
-        isThrottled.current = false;
-        throttleTimeoutId.current = null;
-
-        if (hasPendingScroll.current) {
-          hasPendingScroll.current = false;
-          handleScroll();
-        }
-      }, throttle);
     };
 
     const handleResize = (): void => {
@@ -387,37 +335,49 @@ export function useScrollDetection({
       scheduleRecalculate();
     };
 
+    const handleLayoutChange = (): void => {
+      cacheValidRef.current = false;
+      scheduleRecalculate();
+    };
+
+    cacheValidRef.current = false;
+    resizeObserverRef.current =
+      typeof ResizeObserver === "undefined"
+        ? null
+        : new ResizeObserver(handleLayoutChange);
+
     const deferredRecalcId = setTimeout(() => {
       scheduleRecalculate();
     }, 0);
 
     scrollTarget.addEventListener("scroll", handleScroll, { passive: true });
+    if (supportsScrollEnd) {
+      scrollEndTarget.addEventListener("scrollend", handleScrollEnd, { passive: true });
+    }
     window.addEventListener("resize", handleResize, { passive: true });
 
     return () => {
       clearTimeout(deferredRecalcId);
       scrollTarget.removeEventListener("scroll", handleScroll);
+      scrollEndTarget.removeEventListener("scrollend", handleScrollEnd);
       window.removeEventListener("resize", handleResize);
+      resizeObserverRef.current?.disconnect();
+      resizeObserverRef.current = null;
+      observedElementsRef.current = new Set();
       if (rafId.current) {
         cancelAnimationFrame(rafId.current);
         rafId.current = null;
-      }
-      if (throttleTimeoutId.current) {
-        clearTimeout(throttleTimeoutId.current);
-        throttleTimeoutId.current = null;
       }
       if (scrollIdleTimeoutRef.current) {
         clearTimeout(scrollIdleTimeoutRef.current);
         scrollIdleTimeoutRef.current = null;
       }
       scrollCleanupRef.current?.(); // eslint-disable-line react-hooks/exhaustive-deps -- intentional: need latest cleanup callback
-      isThrottled.current = false;
-      hasPendingScroll.current = false;
       isProgrammaticScrolling.current = false;
       isScrollingRef.current = false;
     };
   }, [
-    throttle,
+    store,
     containerElement,
     selector,
     scheduleRecalculate,
@@ -428,5 +388,4 @@ export function useScrollDetection({
     isProgrammaticScrolling,
   ]);
 
-  return { scroll, sections };
 }

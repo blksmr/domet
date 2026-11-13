@@ -1,6 +1,5 @@
 import type { ScrollContainer, ResolvedSection, Offset } from "../types";
-
-const PERCENT_REGEX = /^(-?\d+(?:\.\d+)?)%$/;
+import { PERCENT_REGEX } from "../constants";
 
 export function resolveContainer(input: ScrollContainer | undefined): HTMLElement | null {
   if (typeof window === "undefined") return null;
@@ -19,11 +18,12 @@ export function resolveSectionsFromIds(
 
 export function resolveSectionsFromSelector(
   selector: string,
+  root?: ParentNode,
 ): ResolvedSection[] {
   if (typeof window === "undefined") return [];
 
   try {
-    const elements = document.querySelectorAll<HTMLElement>(selector);
+    const elements = (root ?? document).querySelectorAll<HTMLElement>(selector);
     const result: ResolvedSection[] = [];
     for (let i = 0; i < elements.length; i++) {
       const el = elements[i];

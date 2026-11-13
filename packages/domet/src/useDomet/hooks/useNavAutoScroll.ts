@@ -1,10 +1,42 @@
 import { useCallback, useEffect, useRef } from "react";
 
-import type { NavRefOptions, ScrollBehavior } from "../../types";
+import type {
+  NavRefOptions,
+  NavRefPosition,
+  ScrollBehavior,
+} from "../../types";
 import { findScrollableParent } from "../../utils";
+
+function resolveAxisScroll(
+  position: NavRefPosition,
+  offset: number,
+  itemStart: number,
+  itemSize: number,
+  viewStart: number,
+  viewSize: number,
+): number | null {
+  const itemEnd = itemStart + itemSize;
+
+  switch (position) {
+    case "start":
+      return itemStart - offset;
+    case "end":
+      return itemEnd - viewSize + offset;
+    case "center":
+      return itemStart - (viewSize - itemSize) / 2;
+    case "nearest":
+    default: {
+      const isBefore = itemStart < viewStart + offset;
+      const isAfter = itemEnd > viewStart + viewSize - offset;
+      if (!isBefore && !isAfter) return null;
+      return isBefore ? itemStart - offset : itemEnd - viewSize + offset;
+    }
+  }
+}
 
 type UseNavAutoScrollParams = {
   activeId: string | null;
+  containerElement: HTMLElement | null;
   getResolvedBehavior: (override?: ScrollBehavior) => ScrollBehavior;
 };
 
@@ -17,6 +49,7 @@ type UseNavAutoScrollReturn = {
 
 export function useNavAutoScroll({
   activeId,
+  containerElement,
   getResolvedBehavior,
 }: UseNavAutoScrollParams): UseNavAutoScrollReturn {
   const navRefs = useRef<Record<string, HTMLElement | null>>({});
@@ -52,61 +85,51 @@ export function useNavAutoScroll({
     const navElement = navRefs.current[activeId];
     if (!navElement) return;
 
+    const scrollable = findScrollableParent(navElement, containerElement);
+    if (!scrollable) return;
+    const scrollableParent = scrollable.element;
+
     const options = navRefOptions.current[activeId];
-    const behavior = getResolvedBehavior(options?.behavior);
     const position = options?.position ?? "nearest";
     const offset = options?.offset ?? 0;
 
-    if (offset === 0) {
-      if (typeof navElement.scrollIntoView !== "function") return;
-      navElement.scrollIntoView({
-        block: position,
-        behavior,
-      });
-      return;
-    }
-
-    const scrollableParent = findScrollableParent(navElement);
-    if (!scrollableParent) return;
-
     const parentRect = scrollableParent.getBoundingClientRect();
     const elementRect = navElement.getBoundingClientRect();
-    const currentScroll = scrollableParent.scrollTop;
 
-    let targetScroll: number;
-    const elementTop = elementRect.top - parentRect.top + currentScroll;
-    const elementBottom = elementTop + elementRect.height;
-    const visibleTop = currentScroll;
-    const visibleBottom = currentScroll + parentRect.height;
-
-    switch (position) {
-      case "start":
-        targetScroll = elementTop - offset;
-        break;
-      case "end":
-        targetScroll = elementBottom - parentRect.height + offset;
-        break;
-      case "center":
-        targetScroll =
-          elementTop - (parentRect.height - elementRect.height) / 2;
-        break;
-      case "nearest":
-      default: {
-        const isAbove = elementTop < visibleTop + offset;
-        const isBelow = elementBottom > visibleBottom - offset;
-        if (!isAbove && !isBelow) return;
-        targetScroll = isAbove
-          ? elementTop - offset
-          : elementBottom - parentRect.height + offset;
-        break;
-      }
-    }
+    const top = scrollable.y
+      ? resolveAxisScroll(
+            position,
+            offset,
+            elementRect.top -
+              parentRect.top -
+              scrollableParent.clientTop +
+              scrollableParent.scrollTop,
+            elementRect.height,
+            scrollableParent.scrollTop,
+            scrollableParent.clientHeight,
+          )
+      : null;
+    const left = scrollable.x
+      ? resolveAxisScroll(
+            "nearest",
+            offset,
+            elementRect.left -
+              parentRect.left -
+              scrollableParent.clientLeft +
+              scrollableParent.scrollLeft,
+            elementRect.width,
+            scrollableParent.scrollLeft,
+            scrollableParent.clientWidth,
+          )
+      : null;
+    if (top === null && left === null) return;
 
     scrollableParent.scrollTo({
-      top: Math.max(0, targetScroll),
-      behavior,
+      ...(top !== null && { top: Math.max(0, top) }),
+      ...(left !== null && { left }),
+      behavior: getResolvedBehavior(options?.behavior),
     });
-  }, [activeId, getResolvedBehavior]);
+  }, [activeId, containerElement, getResolvedBehavior]);
 
   return { navRef };
 }

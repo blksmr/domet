@@ -1,5 +1,4 @@
 import type {
-  InternalSectionBounds,
   SectionScore,
   ResolvedSection,
   CachedSectionPosition,
@@ -12,31 +11,7 @@ export type ScoringContext = {
   scrollHeight: number;
   effectiveOffset: number;
   visibilityThreshold: number;
-  scrollDirection: "up" | "down" | null;
-  sectionIndexMap: Map<string, number>;
 };
-
-export function getSectionBounds(
-  sections: ResolvedSection[],
-  container: HTMLElement | null,
-): InternalSectionBounds[] {
-  const scrollTop = container ? container.scrollTop : window.scrollY;
-  const containerTop = container ? container.getBoundingClientRect().top : 0;
-
-  return sections.map(({ id, element }) => {
-    const rect = element.getBoundingClientRect();
-    const relativeTop = container
-      ? rect.top - containerTop + scrollTop
-      : rect.top + window.scrollY;
-    return {
-      id,
-      top: relativeTop,
-      bottom: relativeTop + rect.height,
-      height: rect.height,
-      rect,
-    };
-  });
-}
 
 export function buildSectionCache(
   sections: ResolvedSection[],
@@ -211,6 +186,8 @@ export function determineActiveSection(
   let bestCandidate: SectionScore | null = null;
   let hasVisibleCandidate = false;
   let currentScore: SectionScore | undefined;
+  let closestAbove: SectionScore | null = null;
+  let closestBelow: SectionScore | null = null;
 
   for (const s of scores) {
     if (currentActiveId !== null && s.id === currentActiveId) {
@@ -224,9 +201,23 @@ export function determineActiveSection(
       bestCandidate = s;
       continue;
     }
+    if (!isVisible) {
+      if (s.bounds.bottom <= scrollY) {
+        if (!closestAbove || s.bounds.bottom > closestAbove.bounds.bottom) {
+          closestAbove = s;
+        }
+      } else if (!closestBelow || s.bounds.top < closestBelow.bounds.top) {
+        closestBelow = s;
+      }
+      continue;
+    }
     if (!bestCandidate || s.score > bestCandidate.score) {
       bestCandidate = s;
     }
+  }
+
+  if (!hasVisibleCandidate) {
+    bestCandidate = closestAbove ?? closestBelow;
   }
 
   if (!bestCandidate) return null;

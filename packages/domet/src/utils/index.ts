@@ -3,8 +3,6 @@ import {
   useLayoutEffect,
 } from "react";
 
-import type { ScrollState, SectionState } from "../types";
-
 export const useIsomorphicLayoutEffect =
   typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
@@ -18,57 +16,33 @@ export function areIdInputsEqual(a: unknown, b: unknown): boolean {
   return true;
 }
 
-export function areScrollStatesEqual(a: ScrollState, b: ScrollState): boolean {
-  return (
-    a.y === b.y &&
-    a.progress === b.progress &&
-    a.direction === b.direction &&
-    a.velocity === b.velocity &&
-    a.scrolling === b.scrolling &&
-    a.maxScroll === b.maxScroll &&
-    a.viewportHeight === b.viewportHeight &&
-    a.trackingOffset === b.trackingOffset &&
-    a.triggerLine === b.triggerLine
-  );
-}
+export type ScrollableParent = {
+  element: HTMLElement;
+  x: boolean;
+  y: boolean;
+};
 
-export function areSectionsEqual(
-  a: Record<string, SectionState>,
-  b: Record<string, SectionState>,
-): boolean {
-  let countA = 0;
-  for (const key in a) {
-    if (!Object.prototype.hasOwnProperty.call(a, key)) continue;
-    countA++;
-    const sA = a[key];
-    const sB = b[key];
-    if (!sB) return false;
-    if (
-      sA.visibility !== sB.visibility ||
-      sA.progress !== sB.progress ||
-      sA.inView !== sB.inView ||
-      sA.active !== sB.active ||
-      sA.bounds.top !== sB.bounds.top ||
-      sA.bounds.bottom !== sB.bounds.bottom ||
-      sA.bounds.height !== sB.bounds.height
-    ) {
-      return false;
-    }
-  }
-  let countB = 0;
-  for (const key in b) {
-    if (Object.prototype.hasOwnProperty.call(b, key)) countB++;
-  }
-  return countA === countB;
-}
-
-export function findScrollableParent(element: HTMLElement): HTMLElement | null {
+export function findScrollableParent(
+  element: HTMLElement,
+  boundary: HTMLElement | null = null,
+): ScrollableParent | null {
+  const { body, documentElement } = element.ownerDocument;
   let parent = element.parentElement;
-  while (parent) {
+  while (
+    parent &&
+    parent !== boundary &&
+    parent !== body &&
+    parent !== documentElement
+  ) {
     const style = getComputedStyle(parent);
-    const overflow = style.overflow + style.overflowY;
-    if (/(auto|scroll)/.test(overflow)) {
-      return parent;
+    const y =
+      /(auto|scroll)/.test(style.overflowY || style.overflow) &&
+      parent.scrollHeight > parent.clientHeight;
+    const x =
+      /(auto|scroll)/.test(style.overflowX || style.overflow) &&
+      parent.scrollWidth > parent.clientWidth;
+    if (x || y) {
+      return { element: parent, x, y };
     }
     parent = parent.parentElement;
   }

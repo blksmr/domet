@@ -2,6 +2,8 @@
 
 export type {
   DometOptions,
+  ElementScrollOptions,
+  ElementScrollTarget,
   LinkProps,
   NavRefOptions,
   NavRefPosition,
@@ -18,6 +20,8 @@ export type {
   SectionState,
   TrackingOptions,
   UseDometReturn,
+  UseElementScrollReturn,
 } from "./types";
 export { default, useDomet } from "./useDomet";
+export { useElementScroll } from "./useElementScroll";
 export { VALIDATION_LIMITS } from "./utils";

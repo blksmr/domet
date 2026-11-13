@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type {
+  DometCallbacks,
   RegisterProps,
   ResolvedSection,
   ScrollContainer,
@@ -20,6 +21,7 @@ type UseSectionResolverParams = {
   initialActiveId: string | null;
   cacheValidRef: React.MutableRefObject<boolean>;
   scheduleRecalculate: () => void;
+  callbackRefs: React.MutableRefObject<DometCallbacks>;
 };
 
 type UseSectionResolverReturn = {
@@ -34,6 +36,17 @@ type UseSectionResolverReturn = {
   register: (id: string) => RegisterProps;
 };
 
+function areSectionListsEqual(
+  a: ResolvedSection[],
+  b: ResolvedSection[],
+): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i].id !== b[i].id || a[i].element !== b[i].element) return false;
+  }
+  return true;
+}
+
 export function useSectionResolver({
   containerInput,
   idsArray,
@@ -42,6 +55,7 @@ export function useSectionResolver({
   initialActiveId,
   cacheValidRef,
   scheduleRecalculate,
+  callbackRefs,
 }: UseSectionResolverParams): UseSectionResolverReturn {
   const [containerElement, setContainerElement] = useState<HTMLElement | null>(
     null,
@@ -49,6 +63,9 @@ export function useSectionResolver({
   const [resolvedSections, setResolvedSections] = useState<ResolvedSection[]>(
     [],
   );
+  const resolvedSectionsRef = useRef<ResolvedSection[]>(resolvedSections);
+  const connectedSectionsRef = useRef<ResolvedSection[] | null>(null);
+  const hasHadActiveRef = useRef<boolean>(initialActiveId !== null);
   const [activeId, setActiveId] = useState<string | null>(initialActiveId);
 
   const refs = useRef<Record<string, HTMLElement | null>>({});
@@ -56,6 +73,10 @@ export function useSectionResolver({
     Record<string, (el: HTMLElement | null) => void>
   >({});
   const registerPropsCache = useRef<Record<string, RegisterProps>>({});
+  const idSectionsCache = useRef<{
+    ids: string[];
+    sections: ResolvedSection[];
+  } | null>(null);
   const activeIdRef = useRef<string | null>(initialActiveId);
   const mutationObserverRef = useRef<MutationObserver | null>(null);
   const mutationDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
@@ -76,6 +97,7 @@ export function useSectionResolver({
   }, [sectionIds]);
 
   const containerRefCurrent = containerInput?.current ?? null;
+  const hasContainer = containerInput !== undefined;
 
   useIsomorphicLayoutEffect(() => {
     const resolved = resolveContainer(containerInput);
@@ -85,22 +107,42 @@ export function useSectionResolver({
   }, [containerInput, containerRefCurrent]);
 
   const updateSectionsFromSelector = useCallback((selector: string) => {
+    if (hasContainer && !containerElement) return;
+    connectedSectionsRef.current = null;
     cacheValidRef.current = false;
-    const resolved = resolveSectionsFromSelector(selector);
-    setResolvedSections(resolved);
+    const resolved = resolveSectionsFromSelector(
+      selector,
+      containerElement ?? undefined,
+    );
+    if (!areSectionListsEqual(resolvedSectionsRef.current, resolved)) {
+      resolvedSectionsRef.current = resolved;
+      setResolvedSections(resolved);
+    }
     if (resolved.length > 0) {
       const currentStillExists = resolved.some(
         (s) => s.id === activeIdRef.current,
       );
       if (!activeIdRef.current || !currentStillExists) {
+        const previousActiveId = activeIdRef.current;
         activeIdRef.current = resolved[0].id;
         setActiveId(resolved[0].id);
+        if (hasHadActiveRef.current) {
+          callbackRefs.current.onActive?.(resolved[0].id, previousActiveId);
+        }
+        hasHadActiveRef.current = true;
       }
     } else if (activeIdRef.current !== null) {
+      const previousActiveId = activeIdRef.current;
       activeIdRef.current = null;
       setActiveId(null);
+      callbackRefs.current.onActive?.(null, previousActiveId);
     }
-  }, [cacheValidRef]);
+  }, [cacheValidRef, hasContainer, containerElement, callbackRefs]);
+
+  useEffect(() => {
+    cacheValidRef.current = false;
+    scheduleRecalculate();
+  }, [resolvedSections, cacheValidRef, scheduleRecalculate]);
 
   useIsomorphicLayoutEffect(() => {
     if (useSelector && selectorString) {
@@ -118,7 +160,20 @@ export function useSectionResolver({
       return;
     }
 
-    const handleMutation = () => {
+    const handleMutation = (records: MutationRecord[]) => {
+      if (
+        connectedSectionsRef.current !== null ||
+        records.some((record) => record.removedNodes.length > 0)
+      ) {
+        const sections = resolvedSectionsRef.current;
+        connectedSectionsRef.current = sections.every(
+          (s) => s.element.isConnected,
+        )
+          ? null
+          : sections.filter((s) => s.element.isConnected);
+        cacheValidRef.current = false;
+      }
+
       if (mutationDebounceRef.current) {
         clearTimeout(mutationDebounceRef.current);
       }
@@ -146,29 +201,28 @@ export function useSectionResolver({
         mutationObserverRef.current.disconnect();
         mutationObserverRef.current = null;
       }
+      connectedSectionsRef.current = null;
     };
   }, [
     useSelector,
     selectorString,
     updateSectionsFromSelector,
     containerElement,
+    cacheValidRef,
   ]);
 
   useEffect(() => {
     if (!useSelector && idsArray) {
       const idsSet = new Set(idsArray);
 
-      for (const id of Object.keys(refs.current)) {
-        if (!idsSet.has(id)) {
-          delete refs.current[id];
-        }
-      }
-
       for (const id of Object.keys(refCallbacks.current)) {
         if (!idsSet.has(id)) {
           delete refCallbacks.current[id];
         }
       }
+
+      cacheValidRef.current = false;
+      scheduleRecalculate();
 
       const currentActive = activeIdRef.current;
       const nextActive =
@@ -179,9 +233,15 @@ export function useSectionResolver({
       if (nextActive !== currentActive) {
         activeIdRef.current = nextActive;
         setActiveId(nextActive);
+        if (hasHadActiveRef.current) {
+          callbackRefs.current.onActive?.(nextActive, currentActive);
+        }
+        if (nextActive !== null) {
+          hasHadActiveRef.current = true;
+        }
       }
     }
-  }, [idsArray, useSelector]);
+  }, [idsArray, useSelector, cacheValidRef, scheduleRecalculate, callbackRefs]);
 
   const registerRef = useCallback(
     (id: string) => {
@@ -194,6 +254,7 @@ export function useSectionResolver({
         } else {
           delete refs.current[id];
         }
+        idSectionsCache.current = null;
         cacheValidRef.current = false;
         scheduleRecalculate();
       };
@@ -206,9 +267,13 @@ export function useSectionResolver({
 
   const getCurrentSections = useCallback((): ResolvedSection[] => {
     if (!useSelector && idsArray) {
-      return resolveSectionsFromIds(idsArray, refs.current);
+      const cached = idSectionsCache.current;
+      if (cached && cached.ids === idsArray) return cached.sections;
+      const sections = resolveSectionsFromIds(idsArray, refs.current);
+      idSectionsCache.current = { ids: idsArray, sections };
+      return sections;
     }
-    return resolvedSections;
+    return connectedSectionsRef.current ?? resolvedSections;
   }, [useSelector, idsArray, resolvedSections]);
 
   const register = useCallback(

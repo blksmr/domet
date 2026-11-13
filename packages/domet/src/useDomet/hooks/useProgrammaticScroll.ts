@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 
 import type {
+  DometCallbacks,
   Offset,
   ResolvedSection,
   ScrollBehavior,
@@ -19,12 +20,15 @@ type UseProgrammaticScrollParams = {
   activeIdRef: React.MutableRefObject<string | null>;
   setActiveId: React.Dispatch<React.SetStateAction<string | null>>;
   isProgrammaticScrolling: React.MutableRefObject<boolean>;
+  heldScrollPosition: React.MutableRefObject<number | null>;
   scrollCleanupRef: React.MutableRefObject<(() => void) | null>;
   optionsRef: React.MutableRefObject<{
     trackingOffset: Offset;
     scrolling: ScrollingOptions & { lockActive?: boolean };
   }>;
   getResolvedBehavior: (override?: ScrollBehavior) => ScrollBehavior;
+  callbackRefs: React.MutableRefObject<DometCallbacks>;
+  scheduleRecalculate: () => void;
 };
 
 type UseProgrammaticScrollReturn = {
@@ -38,9 +42,12 @@ export function useProgrammaticScroll({
   activeIdRef,
   setActiveId,
   isProgrammaticScrolling,
+  heldScrollPosition,
   scrollCleanupRef,
   optionsRef,
   getResolvedBehavior,
+  callbackRefs,
+  scheduleRecalculate,
 }: UseProgrammaticScrollParams): UseProgrammaticScrollReturn {
   const scrollTo = useCallback(
     (target: ScrollTarget, scrollOptions?: ScrollToOptions): void => {
@@ -81,14 +88,11 @@ export function useProgrammaticScroll({
           scrollCleanupRef.current();
           scrollCleanupRef.current = null;
         }
-        isProgrammaticScrolling.current = false;
+        if (isProgrammaticScrolling.current) {
+          isProgrammaticScrolling.current = false;
+          scheduleRecalculate();
+        }
       };
-
-      if (!lockActive) {
-        stopProgrammaticScroll();
-      } else if (scrollCleanupRef.current) {
-        scrollCleanupRef.current();
-      }
 
       const setupLock = () => {
         const unlockScroll = () => {
@@ -115,6 +119,12 @@ export function useProgrammaticScroll({
           isUnlocked = true;
           cleanup();
           unlockScroll();
+          if (activeTargetId) {
+            heldScrollPosition.current = container
+              ? container.scrollTop
+              : window.scrollY;
+          }
+          scheduleRecalculate();
         };
 
         const resetDebounce = () => {
@@ -209,6 +219,14 @@ export function useProgrammaticScroll({
             return clampValue(bottomTarget, 0, maxScroll);
           }
 
+          const sectionIndex = sectionIndexMap.get(id);
+          if (sectionIndex === sectionIndexMap.size - 1 && sectionTop >= maxScroll) {
+            return maxScroll;
+          }
+          if (sectionIndex === 0 && sectionTop < viewportHeight) {
+            return 0;
+          }
+
           const fits = sectionHeight <= viewportHeight;
 
           const dynamicRange = viewportHeight - effectiveOffset;
@@ -252,11 +270,21 @@ export function useProgrammaticScroll({
 
       if (targetScroll === null) return;
 
+      heldScrollPosition.current = null;
+
+      if (!lockActive) {
+        stopProgrammaticScroll();
+      } else if (scrollCleanupRef.current) {
+        scrollCleanupRef.current();
+      }
+
       if (lockActive) {
         isProgrammaticScrolling.current = true;
-        if (activeTargetId) {
+        const previousActiveId = activeIdRef.current;
+        if (activeTargetId && activeTargetId !== previousActiveId) {
           activeIdRef.current = activeTargetId;
           setActiveId(activeTargetId);
+          callbackRefs.current.onActive?.(activeTargetId, previousActiveId);
         }
       }
 
@@ -290,8 +318,11 @@ export function useProgrammaticScroll({
       optionsRef,
       scrollCleanupRef,
       isProgrammaticScrolling,
+      heldScrollPosition,
       activeIdRef,
       setActiveId,
+      callbackRefs,
+      scheduleRecalculate,
     ],
   );
 

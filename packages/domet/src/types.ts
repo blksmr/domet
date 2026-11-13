@@ -55,11 +55,18 @@ export type ScrollToOptions = {
   lockActive?: boolean;
 };
 
+export type ElementScrollOptions = Pick<ScrollToOptions, "behavior" | "position">;
+
+export type ElementScrollTarget = HTMLElement | (() => HTMLElement | null | undefined);
+
+export type UseElementScrollReturn = {
+  scrollTo: (target: ElementScrollTarget, options?: ElementScrollOptions) => void;
+};
+
 export type TrackingOptions = {
   offset?: Offset;
   threshold?: number;
   hysteresis?: number;
-  throttle?: number;
 };
 
 export type ScrollingOptions = ScrollToOptions;
@@ -75,6 +82,7 @@ export type DometOptions = {
   onLeave?: (id: string) => void;
   onScrollStart?: () => void;
   onScrollEnd?: () => void;
+  debug?: boolean;
 } | {
   ids?: never;
   selector: string;
@@ -86,6 +94,7 @@ export type DometOptions = {
   onLeave?: (id: string) => void;
   onScrollStart?: () => void;
   onScrollEnd?: () => void;
+  debug?: boolean;
 };
 
 export type RegisterProps = {
@@ -114,12 +123,58 @@ export type UseDometReturn = {
   navRef: (id: string, options?: NavRefOptions) => (el: HTMLElement | null) => void;
 };
 
+export type DometCallbacks = Pick<
+  DometOptions,
+  "onActive" | "onEnter" | "onLeave" | "onScrollStart" | "onScrollEnd"
+>;
+
+export type DebugOverrides = {
+  tracking?: TrackingOptions;
+  scrolling?: ScrollingOptions;
+};
+
+export type DebugView = {
+  active: string | null;
+  index: number;
+  ids: string[];
+  container: HTMLElement | null;
+  tracking: Required<TrackingOptions>;
+  scrolling: ScrollingOptions;
+  scrollTo: (id: string) => void;
+};
+
+export type DebugEventType =
+  | "active"
+  | "enter"
+  | "leave"
+  | "scrollStart"
+  | "scrollEnd";
+
+export type DebugLimits = Record<
+  "offset" | "offsetPercent" | "threshold" | "hysteresis",
+  { min: number; max: number }
+>;
+
+export type DebugController = {
+  limits: DebugLimits;
+  percentPattern: RegExp;
+  getView: () => DebugView;
+  getScroll: () => ScrollState;
+  getSections: () => Record<string, SectionState>;
+  subscribe: (listener: () => void) => () => void;
+  setOverrides: (overrides: DebugOverrides | null) => void;
+};
+
+export type DebugHandle = {
+  update: () => void;
+  event: (type: DebugEventType, args: unknown[]) => void;
+  destroy: () => void;
+};
+
 export type ResolvedSection = {
   id: string;
   element: HTMLElement;
 };
-
-export type InternalSectionBounds = SectionBounds & { id: string; rect: DOMRect };
 
 export type SectionScore = {
   id: string;
