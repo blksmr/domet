@@ -13,10 +13,10 @@ plans/
 dist-ssr
 *.local
 test-results
-__tests__
 playwright-*
 # Next.js
 .next
+*.tsbuildinfo
 out
 build
 .turbo

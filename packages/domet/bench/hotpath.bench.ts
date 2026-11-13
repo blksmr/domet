@@ -1,6 +1,10 @@
-import { bench, describe } from "vitest";
+import { describe, test } from "vitest";
 
 import type { CachedSectionPosition } from "../src/types";
+import {
+  buildSectionStates,
+  haveSectionsChanged,
+} from "../src/useDomet/store";
 import {
   calculateSectionScores,
   determineActiveSection,
@@ -27,7 +31,6 @@ const cache: CachedSectionPosition[] = Array.from(
 );
 
 const sectionIds = cache.map((c) => c.id);
-const sectionIndexMap = new Map(sectionIds.map((id, i) => [id, i] as const));
 const scrollHeight = SECTION_COUNT * SECTION_HEIGHT;
 const maxScroll = scrollHeight - VIEWPORT_HEIGHT;
 
@@ -49,55 +52,62 @@ function makeContext(scrollY: number): ScoringContext {
     scrollHeight,
     effectiveOffset: EFFECTIVE_OFFSET,
     visibilityThreshold: VISIBILITY_THRESHOLD,
-    scrollDirection: "down",
-    sectionIndexMap,
   };
 }
 
 let activeId: string | null = sectionIds[0];
+let sections = {};
 
 describe("hot path: 100 sections", () => {
-  bench(
-    "full frame (scores + active)",
-    () => {
-      const ctx = makeContext(nextScrollY());
-      const scores = calculateSectionScores(cache, ctx);
-      activeId = determineActiveSection(
-        scores,
-        sectionIds,
-        activeId,
-        HYSTERESIS,
-        ctx.scrollY,
-        ctx.viewportHeight,
-        ctx.scrollHeight,
-      );
-    },
-    { time: 1000 },
-  );
-
-  bench(
-    "stage A: calculateSectionScores (fused)",
-    () => {
-      calculateSectionScores(cache, makeContext(nextScrollY()));
-    },
-    { time: 1000 },
-  );
-
-  bench(
-    "stage B: + determineActiveSection",
-    () => {
-      const ctx = makeContext(nextScrollY());
-      const scores = calculateSectionScores(cache, ctx);
-      determineActiveSection(
-        scores,
-        sectionIds,
-        activeId,
-        HYSTERESIS,
-        ctx.scrollY,
-        ctx.viewportHeight,
-        ctx.scrollHeight,
-      );
-    },
-    { time: 1000 },
-  );
+  test("frame cost", { timeout: 30_000 }, async ({ bench }) => {
+    await bench.compare(
+      bench("full frame (scores + active)", () => {
+        const ctx = makeContext(nextScrollY());
+        const scores = calculateSectionScores(cache, ctx);
+        activeId = determineActiveSection(
+          scores,
+          sectionIds,
+          activeId,
+          HYSTERESIS,
+          ctx.scrollY,
+          ctx.viewportHeight,
+          ctx.scrollHeight,
+        );
+      }),
+      bench("full frame + sections state (when sections is read)", () => {
+        const ctx = makeContext(nextScrollY());
+        const scores = calculateSectionScores(cache, ctx);
+        activeId = determineActiveSection(
+          scores,
+          sectionIds,
+          activeId,
+          HYSTERESIS,
+          ctx.scrollY,
+          ctx.viewportHeight,
+          ctx.scrollHeight,
+        );
+        const source = { scores, cache, scrollY: ctx.scrollY, activeId };
+        if (haveSectionsChanged(sections, source)) {
+          sections = buildSectionStates(source);
+        }
+      }),
+      bench("stage A: calculateSectionScores (fused)", () => {
+        calculateSectionScores(cache, makeContext(nextScrollY()));
+      }),
+      bench("stage B: + determineActiveSection", () => {
+        const ctx = makeContext(nextScrollY());
+        const scores = calculateSectionScores(cache, ctx);
+        determineActiveSection(
+          scores,
+          sectionIds,
+          activeId,
+          HYSTERESIS,
+          ctx.scrollY,
+          ctx.viewportHeight,
+          ctx.scrollHeight,
+        );
+      }),
+      { time: 1000 },
+    );
+  });
 });

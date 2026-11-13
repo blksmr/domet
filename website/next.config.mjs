@@ -6,7 +6,6 @@ const withMDX = createMDX();
 const nextConfig = {
   reactStrictMode: true,
   pageExtensions: ["md", "mdx", "tsx", "ts", "jsx", "js"],
-  transpilePackages: ["next-mdx-remote"],
   images: {
     formats: ["image/webp"],
     minimumCacheTTL: 2678400,

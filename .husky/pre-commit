@@ -1,8 +1,12 @@
 #!/usr/bin/env sh
 
 if git diff --cached --name-only | grep -q "website/content/documentation.mdx"; then
-    SCRIPT_OUTPUT=$(npx tsx scripts/documentation.ts)
-    
+    if ! SCRIPT_OUTPUT=$(npx --no-install tsx scripts/documentation.ts); then
+        echo "$SCRIPT_OUTPUT"
+        echo "[domet] Documentation sync failed. Commit aborted."
+        exit 1
+    fi
+
     UPDATED_FILES=$(echo "$SCRIPT_OUTPUT" | tail -n 1)
     
     if [ -n "$UPDATED_FILES" ] && [ "$UPDATED_FILES" != "○ Syncing Documentation" ]; then

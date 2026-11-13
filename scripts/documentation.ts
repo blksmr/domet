@@ -76,7 +76,11 @@ function transformPropTable(match: string): string {
     });
   }
 
-  if (items.length === 0) return "";
+  if (items.length === 0) {
+    throw new Error(
+      "PropTable could not be parsed. Use double-quoted name, type, default and description.",
+    );
+  }
 
   const hasDefault = items.some((item) => item.default !== undefined);
 
@@ -154,7 +158,11 @@ function updateSiteConfig(frontmatter: FrontmatterData): "success" | "error" {
 
     fs.writeFileSync(siteConfigFile, updated);
     return "success";
-  } catch {
+  } catch (error) {
+    console.error(
+      "Error writing website/config/site.ts:",
+      (error as Error).message,
+    );
     return "error";
   }
 }
@@ -214,6 +222,10 @@ function syncDocumentation(): void {
     });
 
     formatTreeOutput(results);
+
+    if (Object.values(results).includes("error")) {
+      process.exit(1);
+    }
 
     if (updatedFiles.length > 0) {
       console.log(updatedFiles.join(" "));

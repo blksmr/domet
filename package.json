@@ -1,19 +1,20 @@
 {
   "name": "domet-monorepo",
   "version": "1.0.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "prepare": "husky",
     "dev": "turbo run dev",
     "test": "turbo run test",
-    "test:e2e": "npm run test:e2e -w packages/domet",
     "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
     "build": "turbo run build",
     "start": "cd website && npm run start",
     "build:dev": "turbo run build:dev",
-    "documentation": "npx tsx scripts/documentation.ts",
+    "documentation": "tsx scripts/documentation.ts",
     "clean": "npx turbo run clean && rm -rf .turbo node_modules/.cache",
-    "publish": "npm run clean -w packages/domet && npx turbo run build --filter=domet && npm version patch --workspace=packages/domet && npm publish --workspace=packages/domet"
+    "release": "npm run lint && npm run typecheck && npm run test && npm run clean -w packages/domet && npx turbo run build --filter=domet && npm run size -w packages/domet && npm publish --workspace=packages/domet"
   },
   "workspaces": [
     "packages/*",
@@ -27,6 +28,7 @@
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^16.2.0",
     "husky": "^9.1.7",
+    "tsx": "^4.23.15",
     "turbo": "^2.7.5",
     "typescript": "5.8.3",
     "typescript-eslint": "^8.33.1"
